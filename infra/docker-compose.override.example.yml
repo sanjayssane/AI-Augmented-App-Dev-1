@@ -1,0 +1,7 @@
+# Copy to docker-compose.override.yml for local customizations (gitignored optional).
+# Example: expose different ports or add volume mounts.
+
+# services:
+#   api:
+#     ports:
+#       - "8001:8000"
