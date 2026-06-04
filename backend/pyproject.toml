@@ -13,6 +13,8 @@ dependencies = [
     "psycopg[binary]>=3.2.0",
     "redis>=5.2.0",
     "httpx>=0.28.0",
+    "bcrypt>=4.2.0",
+    "cryptography>=43.0.0",
 ]
 
 [project.optional-dependencies]
@@ -22,6 +24,7 @@ dev = [
     "ruff>=0.8.0",
     "mypy>=1.13.0",
     "pip-audit>=2.7.0",
+    "testcontainers[postgres]>=4.9.0",
 ]
 
 [build-system]
@@ -38,6 +41,9 @@ src = ["app", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+"alembic/versions/*.py" = ["UP035", "UP007", "E501"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

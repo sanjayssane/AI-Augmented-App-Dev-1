@@ -29,6 +29,20 @@ jobs:
     defaults:
       run:
         working-directory: backend
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: mcq
+          POSTGRES_PASSWORD: mcq_dev_password
+          POSTGRES_DB: mcq_platform
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U mcq -d mcq_platform"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -36,10 +50,16 @@ jobs:
           python-version: "3.12"
       - name: Install dependencies
         run: pip install -e ".[dev]"
+      - name: Run migrations
+        run: alembic upgrade head
+        env:
+          DATABASE_URL: postgresql+psycopg://mcq:mcq_dev_password@localhost:5432/mcq_platform
       - name: Pytest
         run: pytest tests -v
         env:
           SKIP_READY_TEST: "1"
+          DATABASE_URL: postgresql+psycopg://mcq:mcq_dev_password@localhost:5432/mcq_platform
+          RUN_DB_TESTS: "1"
 
   frontend-lint:
     runs-on: ubuntu-latest

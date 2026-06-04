@@ -1,4 +1,4 @@
-.PHONY: dev-up dev-down dev-logs backend-test backend-lint frontend-lint frontend-build frontend-dev install-backend
+.PHONY: dev-up dev-down dev-logs backend-test backend-lint frontend-lint frontend-build frontend-dev install-backend db-migrate db-downgrade db-revision
 
 COMPOSE_FILE := infra/docker-compose.yml
 
@@ -13,6 +13,16 @@ dev-logs:
 
 install-backend:
 	cd backend && pip install -e ".[dev]"
+
+db-migrate:
+	cd backend && alembic upgrade head
+
+db-downgrade:
+	cd backend && alembic downgrade -1
+
+db-revision:
+	@test -n "$(MSG)" || (echo "Usage: make db-revision MSG='description'" && exit 1)
+	cd backend && alembic revision --autogenerate -m "$(MSG)"
 
 backend-test:
 	cd backend && pytest tests -v
