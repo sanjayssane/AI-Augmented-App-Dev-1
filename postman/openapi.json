@@ -1,0 +1,2449 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "MCQ Online Test Platform API",
+    "description": "Role-based examination system API (Phase 0 scaffold).",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/v1/health": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "Health",
+        "description": "Liveness probe \u2014 no external dependencies.",
+        "operationId": "health_api_v1_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object",
+                  "title": "Response Health Api V1 Health Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ready": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "Ready",
+        "description": "Readiness probe \u2014 PostgreSQL and Redis connectivity.",
+        "operationId": "ready_api_v1_ready_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "boolean"
+                      }
+                    ]
+                  },
+                  "type": "object",
+                  "title": "Response Ready Api V1 Ready Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/csrf": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Get Csrf Token",
+        "operationId": "get_csrf_token_api_v1_auth_csrf_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse_CsrfTokenResponse_"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/examiner/login": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Examiner Login",
+        "operationId": "examiner_login_api_v1_auth_examiner_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExaminerLoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse_ExaminerLoginResponse_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/examinee/entry": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Examinee Entry",
+        "operationId": "examinee_entry_api_v1_auth_examinee_entry_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExamineeEntryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/app__schemas__common__SuccessResponse_ExamineeSessionResource___1"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/logout": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Logout",
+        "operationId": "logout_api_v1_auth_logout_post",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/me": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Get Current User Profile",
+        "operationId": "get_current_user_profile_api_v1_auth_me_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse_CurrentUserResponse_"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/examinee/sessions/current": {
+      "get": {
+        "tags": [
+          "examinee"
+        ],
+        "summary": "Get Current Session",
+        "operationId": "get_current_session_api_v1_examinee_sessions_current_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/app__schemas__common__SuccessResponse_ExamineeSessionResource___2"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/examinee/sessions/{session_id}/questions/{position}": {
+      "get": {
+        "tags": [
+          "examinee"
+        ],
+        "summary": "Get Question At Position",
+        "operationId": "get_question_at_position_api_v1_examinee_sessions__session_id__questions__position__get",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "position",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Position"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse_ExamineeQuestionAtPositionResource_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/examinee/sessions/{session_id}/responses/{question_id}": {
+      "put": {
+        "tags": [
+          "examinee"
+        ],
+        "summary": "Save Response",
+        "operationId": "save_response_api_v1_examinee_sessions__session_id__responses__question_id__put",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "question_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Question Id"
+            }
+          },
+          {
+            "name": "If-Unmodified-Since",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Unmodified-Since"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveResponseRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse_SaveResponseResult_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/examinee/sessions/{session_id}/submit": {
+      "post": {
+        "tags": [
+          "examinee"
+        ],
+        "summary": "Submit Session",
+        "operationId": "submit_session_api_v1_examinee_sessions__session_id__submit_post",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubmitSessionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse_SubmitSessionResult_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/examinee/sessions/{session_id}/review": {
+      "get": {
+        "tags": [
+          "examinee"
+        ],
+        "summary": "Get Review",
+        "operationId": "get_review_api_v1_examinee_sessions__session_id__review_get",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse_ReviewResult_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/examinee/me/data-export": {
+      "get": {
+        "tags": [
+          "examinee"
+        ],
+        "summary": "Data Export",
+        "operationId": "data_export_api_v1_examinee_me_data_export_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/examiner/questions": {
+      "get": {
+        "tags": [
+          "examiner-questions"
+        ],
+        "summary": "List Questions",
+        "operationId": "list_questions_api_v1_examiner_questions_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "name": "include_deleted",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Include Deleted"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse_QuestionListData_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "examiner-questions"
+        ],
+        "summary": "Create Question",
+        "operationId": "create_question_api_v1_examiner_questions_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuestionCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse_QuestionOut_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/examiner/questions/{question_id}": {
+      "patch": {
+        "tags": [
+          "examiner-questions"
+        ],
+        "summary": "Patch Question",
+        "operationId": "patch_question_api_v1_examiner_questions__question_id__patch",
+        "parameters": [
+          {
+            "name": "question_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Question Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuestionPatchRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse_QuestionOut_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "examiner-questions"
+        ],
+        "summary": "Delete Question",
+        "operationId": "delete_question_api_v1_examiner_questions__question_id__delete",
+        "parameters": [
+          {
+            "name": "question_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Question Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/examiner/sessions": {
+      "get": {
+        "tags": [
+          "examiner-sessions"
+        ],
+        "summary": "List Sessions",
+        "operationId": "list_sessions_api_v1_examiner_sessions_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse_SessionListData_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/examiner/sessions/export": {
+      "get": {
+        "tags": [
+          "examiner-sessions"
+        ],
+        "summary": "Export Sessions",
+        "operationId": "export_sessions_api_v1_examiner_sessions_export_get",
+        "parameters": [
+          {
+            "name": "anonymised",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Anonymised"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/examiner/sessions/{session_id}": {
+      "get": {
+        "tags": [
+          "examiner-sessions"
+        ],
+        "summary": "Session Detail",
+        "operationId": "session_detail_api_v1_examiner_sessions__session_id__get",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse_SessionDetailOut_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/examiner/users/examiners": {
+      "post": {
+        "tags": [
+          "examiner-users"
+        ],
+        "summary": "Create Examiner",
+        "operationId": "create_examiner_api_v1_examiner_users_examiners_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateExaminerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse_ExaminerUserOut_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/examiner/users/examinees/{user_id}/erase": {
+      "post": {
+        "tags": [
+          "examiner-users"
+        ],
+        "summary": "Erase Examinee",
+        "operationId": "erase_examinee_api_v1_examiner_users_examinees__user_id__erase_post",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "User Id"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse_EraseExamineeResponse_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/examiner/settings": {
+      "get": {
+        "tags": [
+          "examiner-settings"
+        ],
+        "summary": "Get Settings",
+        "operationId": "get_settings_api_v1_examiner_settings_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse_PlatformSettingsOut_"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "examiner-settings"
+        ],
+        "summary": "Patch Settings",
+        "operationId": "patch_settings_api_v1_examiner_settings_patch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlatformSettingsPatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse_PlatformSettingsOut_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "CorrectOption": {
+        "type": "string",
+        "enum": [
+          "A",
+          "B",
+          "C",
+          "D"
+        ],
+        "title": "CorrectOption"
+      },
+      "CreateExaminerRequest": {
+        "properties": {
+          "username": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Username"
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 12,
+            "title": "Password"
+          },
+          "force_password_change": {
+            "type": "boolean",
+            "title": "Force Password Change",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "username",
+          "password"
+        ],
+        "title": "CreateExaminerRequest"
+      },
+      "CsrfTokenResponse": {
+        "properties": {
+          "csrf_token": {
+            "type": "string",
+            "title": "Csrf Token"
+          }
+        },
+        "type": "object",
+        "required": [
+          "csrf_token"
+        ],
+        "title": "CsrfTokenResponse"
+      },
+      "CurrentUserResponse": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "User Id"
+          },
+          "role": {
+            "$ref": "#/components/schemas/UserRole"
+          },
+          "prn": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prn"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Username"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id",
+          "role"
+        ],
+        "title": "CurrentUserResponse"
+      },
+      "EraseExamineeResponse": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "User Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "default": "accepted"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id"
+        ],
+        "title": "EraseExamineeResponse"
+      },
+      "ExamineeEntryRequest": {
+        "properties": {
+          "prn": {
+            "type": "string",
+            "maxLength": 20,
+            "minLength": 1,
+            "title": "Prn"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "privacy_acknowledged": {
+            "type": "boolean",
+            "title": "Privacy Acknowledged"
+          }
+        },
+        "type": "object",
+        "required": [
+          "prn",
+          "name",
+          "privacy_acknowledged"
+        ],
+        "title": "ExamineeEntryRequest"
+      },
+      "ExamineeQuestionAtPositionResource": {
+        "properties": {
+          "position": {
+            "type": "integer",
+            "maximum": 50.0,
+            "minimum": 1.0,
+            "title": "Position"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "default": 50
+          },
+          "question": {
+            "$ref": "#/components/schemas/SessionQuestionPayload"
+          },
+          "selected_option": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SelectedOption"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "answered_count": {
+            "type": "integer",
+            "title": "Answered Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "position",
+          "question",
+          "answered_count"
+        ],
+        "title": "ExamineeQuestionAtPositionResource"
+      },
+      "ExaminerLoginRequest": {
+        "properties": {
+          "username": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Username"
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "username",
+          "password"
+        ],
+        "title": "ExaminerLoginRequest"
+      },
+      "ExaminerLoginResponse": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "User Id"
+          },
+          "username": {
+            "type": "string",
+            "title": "Username"
+          },
+          "must_change_password": {
+            "type": "boolean",
+            "title": "Must Change Password",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id",
+          "username"
+        ],
+        "title": "ExaminerLoginResponse"
+      },
+      "ExaminerUserOut": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "User Id"
+          },
+          "username": {
+            "type": "string",
+            "title": "Username"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active"
+          },
+          "force_password_change": {
+            "type": "boolean",
+            "title": "Force Password Change"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id",
+          "username",
+          "is_active",
+          "force_password_change",
+          "created_at"
+        ],
+        "title": "ExaminerUserOut"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "PlatformSettingsOut": {
+        "properties": {
+          "retention_days_completed": {
+            "type": "integer",
+            "maximum": 3650.0,
+            "minimum": 1.0,
+            "title": "Retention Days Completed"
+          },
+          "allow_examinee_retake": {
+            "type": "boolean",
+            "title": "Allow Examinee Retake"
+          },
+          "question_selection_mode": {
+            "$ref": "#/components/schemas/SelectionMode"
+          }
+        },
+        "type": "object",
+        "required": [
+          "retention_days_completed",
+          "allow_examinee_retake",
+          "question_selection_mode"
+        ],
+        "title": "PlatformSettingsOut"
+      },
+      "PlatformSettingsPatchRequest": {
+        "properties": {
+          "retention_days_completed": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 3650.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retention Days Completed"
+          },
+          "allow_examinee_retake": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allow Examinee Retake"
+          },
+          "question_selection_mode": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SelectionMode"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "title": "PlatformSettingsPatchRequest"
+      },
+      "QuestionCreateRequest": {
+        "properties": {
+          "question_text": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Question Text"
+          },
+          "option_a": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Option A"
+          },
+          "option_b": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Option B"
+          },
+          "option_c": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Option C"
+          },
+          "option_d": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Option D"
+          },
+          "correct_option": {
+            "$ref": "#/components/schemas/CorrectOption"
+          }
+        },
+        "type": "object",
+        "required": [
+          "question_text",
+          "option_a",
+          "option_b",
+          "option_c",
+          "option_d",
+          "correct_option"
+        ],
+        "title": "QuestionCreateRequest"
+      },
+      "QuestionListData": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/QuestionOut"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "active_count": {
+            "type": "integer",
+            "title": "Active Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "next_cursor",
+          "active_count"
+        ],
+        "title": "QuestionListData"
+      },
+      "QuestionOption": {
+        "properties": {
+          "key": {
+            "$ref": "#/components/schemas/CorrectOption"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "text"
+        ],
+        "title": "QuestionOption"
+      },
+      "QuestionOut": {
+        "properties": {
+          "question_text": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Question Text"
+          },
+          "option_a": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Option A"
+          },
+          "option_b": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Option B"
+          },
+          "option_c": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Option C"
+          },
+          "option_d": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Option D"
+          },
+          "correct_option": {
+            "$ref": "#/components/schemas/CorrectOption"
+          },
+          "question_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Question Id"
+          },
+          "question_version": {
+            "type": "integer",
+            "title": "Question Version"
+          },
+          "is_deleted": {
+            "type": "boolean",
+            "title": "Is Deleted"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "question_text",
+          "option_a",
+          "option_b",
+          "option_c",
+          "option_d",
+          "correct_option",
+          "question_id",
+          "question_version",
+          "is_deleted",
+          "updated_at"
+        ],
+        "title": "QuestionOut"
+      },
+      "QuestionPatchRequest": {
+        "properties": {
+          "question_text": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question Text"
+          },
+          "option_a": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Option A"
+          },
+          "option_b": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Option B"
+          },
+          "option_c": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Option C"
+          },
+          "option_d": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Option D"
+          },
+          "correct_option": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CorrectOption"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "title": "QuestionPatchRequest"
+      },
+      "ResponseMeta": {
+        "properties": {
+          "request_id": {
+            "type": "string",
+            "title": "Request Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "request_id"
+        ],
+        "title": "ResponseMeta"
+      },
+      "ReviewItem": {
+        "properties": {
+          "position": {
+            "type": "integer",
+            "maximum": 50.0,
+            "minimum": 1.0,
+            "title": "Position"
+          },
+          "question_text": {
+            "type": "string",
+            "title": "Question Text"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/QuestionOption"
+            },
+            "type": "array",
+            "title": "Options"
+          },
+          "selected_option": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SelectedOption"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "correct_option": {
+            "$ref": "#/components/schemas/CorrectOption"
+          },
+          "is_correct": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Correct"
+          }
+        },
+        "type": "object",
+        "required": [
+          "position",
+          "question_text",
+          "options",
+          "correct_option"
+        ],
+        "title": "ReviewItem"
+      },
+      "ReviewResult": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewItem"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "ReviewResult"
+      },
+      "SaveResponseRequest": {
+        "properties": {
+          "selected_option": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SelectedOption"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "title": "SaveResponseRequest"
+      },
+      "SaveResponseResult": {
+        "properties": {
+          "question_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Question Id"
+          },
+          "selected_option": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SelectedOption"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "answered_count": {
+            "type": "integer",
+            "title": "Answered Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "question_id",
+          "updated_at",
+          "answered_count"
+        ],
+        "title": "SaveResponseResult"
+      },
+      "SelectedOption": {
+        "type": "string",
+        "enum": [
+          "A",
+          "B",
+          "C",
+          "D"
+        ],
+        "title": "SelectedOption"
+      },
+      "SelectionMode": {
+        "type": "string",
+        "enum": [
+          "FIXED_ORDER",
+          "RANDOM_SAMPLE"
+        ],
+        "title": "SelectionMode"
+      },
+      "SessionDetailOut": {
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Session Id"
+          },
+          "status": {
+            "$ref": "#/components/schemas/SessionStatus"
+          },
+          "score": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score"
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Started At"
+          },
+          "submitted_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Submitted At"
+          },
+          "selection_mode": {
+            "$ref": "#/components/schemas/SelectionMode"
+          },
+          "prn": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prn"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "responses": {
+            "items": {
+              "$ref": "#/components/schemas/SessionQuestionResultOut"
+            },
+            "type": "array",
+            "title": "Responses"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id",
+          "status",
+          "score",
+          "started_at",
+          "submitted_at",
+          "selection_mode",
+          "prn",
+          "name",
+          "responses"
+        ],
+        "title": "SessionDetailOut"
+      },
+      "SessionListData": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SessionSummaryOut"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "title": "SessionListData"
+      },
+      "SessionQuestionPayload": {
+        "properties": {
+          "question_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Question Id"
+          },
+          "question_text": {
+            "type": "string",
+            "title": "Question Text"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/QuestionOption"
+            },
+            "type": "array",
+            "title": "Options"
+          }
+        },
+        "type": "object",
+        "required": [
+          "question_id",
+          "question_text",
+          "options"
+        ],
+        "title": "SessionQuestionPayload"
+      },
+      "SessionQuestionResultOut": {
+        "properties": {
+          "question_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Question Id"
+          },
+          "position": {
+            "type": "integer",
+            "title": "Position"
+          },
+          "question_text": {
+            "type": "string",
+            "title": "Question Text"
+          },
+          "selected_option": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SelectedOption"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "correct_option": {
+            "$ref": "#/components/schemas/CorrectOption"
+          },
+          "is_correct": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Correct"
+          }
+        },
+        "type": "object",
+        "required": [
+          "question_id",
+          "position",
+          "question_text",
+          "selected_option",
+          "correct_option",
+          "is_correct"
+        ],
+        "title": "SessionQuestionResultOut"
+      },
+      "SessionStatus": {
+        "type": "string",
+        "enum": [
+          "ACTIVE",
+          "COMPLETED",
+          "EXPIRED"
+        ],
+        "title": "SessionStatus"
+      },
+      "SessionSummaryOut": {
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Session Id"
+          },
+          "status": {
+            "$ref": "#/components/schemas/SessionStatus"
+          },
+          "score": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score"
+          },
+          "submitted_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Submitted At"
+          },
+          "prn": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prn"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id",
+          "status",
+          "score",
+          "submitted_at",
+          "prn",
+          "name"
+        ],
+        "title": "SessionSummaryOut"
+      },
+      "SubmitSessionRequest": {
+        "properties": {
+          "confirm": {
+            "type": "boolean",
+            "const": true,
+            "title": "Confirm"
+          }
+        },
+        "type": "object",
+        "required": [
+          "confirm"
+        ],
+        "title": "SubmitSessionRequest"
+      },
+      "SubmitSessionResult": {
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Session Id"
+          },
+          "status": {
+            "$ref": "#/components/schemas/SessionStatus"
+          },
+          "score": {
+            "type": "integer",
+            "title": "Score"
+          },
+          "max_score": {
+            "type": "integer",
+            "title": "Max Score",
+            "default": 50
+          },
+          "correct_count": {
+            "type": "integer",
+            "title": "Correct Count"
+          },
+          "incorrect_count": {
+            "type": "integer",
+            "title": "Incorrect Count"
+          },
+          "unattempted_count": {
+            "type": "integer",
+            "title": "Unattempted Count"
+          },
+          "submitted_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Submitted At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id",
+          "status",
+          "score",
+          "correct_count",
+          "incorrect_count",
+          "unattempted_count",
+          "submitted_at"
+        ],
+        "title": "SubmitSessionResult"
+      },
+      "SuccessResponse_CsrfTokenResponse_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/CsrfTokenResponse"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ResponseMeta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "SuccessResponse[CsrfTokenResponse]"
+      },
+      "SuccessResponse_CurrentUserResponse_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/CurrentUserResponse"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ResponseMeta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "SuccessResponse[CurrentUserResponse]"
+      },
+      "SuccessResponse_EraseExamineeResponse_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/EraseExamineeResponse"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ResponseMeta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "SuccessResponse[EraseExamineeResponse]"
+      },
+      "SuccessResponse_ExamineeQuestionAtPositionResource_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ExamineeQuestionAtPositionResource"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ResponseMeta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "SuccessResponse[ExamineeQuestionAtPositionResource]"
+      },
+      "SuccessResponse_ExaminerLoginResponse_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ExaminerLoginResponse"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ResponseMeta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "SuccessResponse[ExaminerLoginResponse]"
+      },
+      "SuccessResponse_ExaminerUserOut_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ExaminerUserOut"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ResponseMeta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "SuccessResponse[ExaminerUserOut]"
+      },
+      "SuccessResponse_PlatformSettingsOut_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/PlatformSettingsOut"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ResponseMeta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "SuccessResponse[PlatformSettingsOut]"
+      },
+      "SuccessResponse_QuestionListData_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/QuestionListData"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ResponseMeta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "SuccessResponse[QuestionListData]"
+      },
+      "SuccessResponse_QuestionOut_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/QuestionOut"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ResponseMeta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "SuccessResponse[QuestionOut]"
+      },
+      "SuccessResponse_ReviewResult_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ReviewResult"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ResponseMeta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "SuccessResponse[ReviewResult]"
+      },
+      "SuccessResponse_SaveResponseResult_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/SaveResponseResult"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ResponseMeta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "SuccessResponse[SaveResponseResult]"
+      },
+      "SuccessResponse_SessionDetailOut_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/SessionDetailOut"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ResponseMeta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "SuccessResponse[SessionDetailOut]"
+      },
+      "SuccessResponse_SessionListData_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/SessionListData"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ResponseMeta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "SuccessResponse[SessionListData]"
+      },
+      "SuccessResponse_SubmitSessionResult_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/SubmitSessionResult"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ResponseMeta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "SuccessResponse[SubmitSessionResult]"
+      },
+      "UserRole": {
+        "type": "string",
+        "enum": [
+          "EXAMINER",
+          "EXAMINEE"
+        ],
+        "title": "UserRole"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "app__schemas__auth__ExamineeSessionResource": {
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Session Id"
+          },
+          "status": {
+            "$ref": "#/components/schemas/SessionStatus"
+          },
+          "total_questions": {
+            "type": "integer",
+            "title": "Total Questions",
+            "default": 50
+          },
+          "answered_count": {
+            "type": "integer",
+            "title": "Answered Count"
+          },
+          "current_position": {
+            "type": "integer",
+            "title": "Current Position",
+            "default": 1
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Started At"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expires At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id",
+          "status",
+          "answered_count",
+          "started_at",
+          "expires_at"
+        ],
+        "title": "ExamineeSessionResource"
+      },
+      "app__schemas__common__SuccessResponse_ExamineeSessionResource___1": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/app__schemas__auth__ExamineeSessionResource"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ResponseMeta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "SuccessResponse[ExamineeSessionResource]"
+      },
+      "app__schemas__common__SuccessResponse_ExamineeSessionResource___2": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/app__schemas__examinee__ExamineeSessionResource"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ResponseMeta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "SuccessResponse[ExamineeSessionResource]"
+      },
+      "app__schemas__examinee__ExamineeSessionResource": {
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Session Id"
+          },
+          "status": {
+            "$ref": "#/components/schemas/SessionStatus"
+          },
+          "total_questions": {
+            "type": "integer",
+            "title": "Total Questions",
+            "default": 50
+          },
+          "answered_count": {
+            "type": "integer",
+            "title": "Answered Count",
+            "default": 0
+          },
+          "current_position": {
+            "type": "integer",
+            "title": "Current Position",
+            "default": 1
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Started At"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expires At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id",
+          "status",
+          "started_at",
+          "expires_at"
+        ],
+        "title": "ExamineeSessionResource"
+      }
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8000",
+      "description": "Local dev"
+    }
+  ]
+}
