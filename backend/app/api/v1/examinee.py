@@ -7,7 +7,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, Response, status
 
-from app.core.auth import ExamineeUserDep
+from app.core.auth import CsrfProtectedDep, ExamineeUserDep
 from app.core.deps import get_gdpr_service, get_scoring_service, get_test_session_service
 from app.core.request_id import get_request_id
 from app.domain.concurrency import parse_if_unmodified_since
@@ -95,6 +95,7 @@ def save_response(
     question_id: uuid.UUID,
     body: SaveResponseRequest,
     examinee: ExamineeUserDep,
+    _csrf: CsrfProtectedDep,
     test_session_service: Annotated[TestSessionService, Depends(get_test_session_service)],
     if_unmodified_since: Annotated[str | None, Header(alias="If-Unmodified-Since")] = None,
 ) -> SuccessResponse[SaveResponseResult]:
@@ -126,6 +127,7 @@ def submit_session(
     session_id: uuid.UUID,
     body: SubmitSessionRequest,
     examinee: ExamineeUserDep,
+    _csrf: CsrfProtectedDep,
     scoring_service: Annotated[ScoringService, Depends(get_scoring_service)],
     idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
 ) -> SuccessResponse[SubmitSessionResult]:

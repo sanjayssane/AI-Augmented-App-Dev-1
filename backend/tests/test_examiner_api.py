@@ -8,8 +8,9 @@ from datetime import UTC, datetime
 import pytest
 from fastapi.testclient import TestClient
 
-from app.core.auth import CurrentUser, require_examiner
+from app.core.auth import CurrentUser, require_admin_examiner, require_csrf, require_examiner
 from app.core.deps import (
+    get_gdpr_service,
     get_question_service,
     get_results_service,
     get_settings_service,
@@ -123,6 +124,7 @@ class _ResultsServiceMock:
             (),
             {
                 "session_id": session_id,
+                "user_id": uuid.uuid4(),
                 "status": SessionStatus.COMPLETED,
                 "score": 45,
                 "started_at": datetime.now(UTC),
@@ -199,6 +201,11 @@ class _UserAdminServiceMock:
         )()
 
 
+class _GdprServiceMock:
+    def request_erasure(self, *, examinee_user_id, operator_user_id):
+        return uuid.uuid4()
+
+
 @pytest.fixture
 def examiner_client() -> TestClient:
     mock_user = CurrentUser(
@@ -208,11 +215,14 @@ def examiner_client() -> TestClient:
         csrf_token="csrf-token",
     )
     app.dependency_overrides[require_examiner] = lambda: mock_user
+    app.dependency_overrides[require_admin_examiner] = lambda: mock_user
+    app.dependency_overrides[require_csrf] = lambda: mock_user
 
     app.dependency_overrides[get_question_service] = lambda: _QuestionServiceMock()
     app.dependency_overrides[get_results_service] = lambda: _ResultsServiceMock()
     app.dependency_overrides[get_settings_service] = lambda: _SettingsServiceMock()
     app.dependency_overrides[get_user_admin_service] = lambda: _UserAdminServiceMock()
+    app.dependency_overrides[get_gdpr_service] = lambda: _GdprServiceMock()
     with TestClient(app) as client:
         yield client
     app.dependency_overrides.clear()
@@ -272,5 +282,10 @@ def test_examiner_users_contract(examiner_client: TestClient) -> None:
     assert create_response.status_code == 201
     assert create_response.json()["data"]["username"] == "new_examiner"
 
-    erase_response = examiner_client.post(f"/api/v1/examiner/users/examinees/{uuid.uuid4()}/erase")
+    examinee_id = uuid.uuid4()
+    erase_response = examiner_client.post(f"/api/v1/examiner/users/examinees/{examinee_id}/erase")
     assert erase_response.status_code == 202
+    erase_data = erase_response.json()["data"]
+    assert erase_data["user_id"] == str(examinee_id)
+    assert erase_data["status"] == "accepted"
+    assert "job_id" in erase_data

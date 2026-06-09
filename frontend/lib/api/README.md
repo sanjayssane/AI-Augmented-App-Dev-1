@@ -1,9 +1,12 @@
-# API client (Phase 5)
+# API Client
 
-Typed fetch wrapper with:
+Typed wrappers for FastAPI `/api/v1` endpoints.
 
-- `credentials: 'include'` for HttpOnly session cookies
-- `X-CSRF-Token` header on state-changing requests
-- Base URL from `NEXT_PUBLIC_API_BASE_URL`
+| Module | File |
+|--------|------|
+| Core fetch | `client.ts` — cookies, CSRF, concurrency headers, blob downloads |
+| Auth | `auth.ts` |
+| Examinee | `examinee.ts` |
+| Examiner | `examiner.ts` |
 
-See `client.ts` for the scaffold stub.
+Types live in `lib/types/index.ts`. Regenerate from OpenAPI with `npm run generate:types`.

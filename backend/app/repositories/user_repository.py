@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.encryption import encrypt_field, prn_lookup_hash
@@ -51,6 +51,13 @@ class UserRepository:
         session.flush()
         return user
 
+    def count_examiners(self, session: Session) -> int:
+        stmt = select(func.count()).select_from(User).where(
+            User.role == UserRole.EXAMINER,
+            User.deleted_at.is_(None),
+        )
+        return session.scalar(stmt) or 0
+
     def create_examiner(
         self,
         session: Session,
@@ -58,12 +65,14 @@ class UserRepository:
         username: str,
         password_hash: str,
         is_active: bool = True,
+        is_admin: bool = False,
     ) -> User:
         user = User(
             role=UserRole.EXAMINER,
             username=username.strip(),
             password_hash=password_hash,
             is_active=is_active,
+            is_admin=is_admin,
         )
         session.add(user)
         session.flush()

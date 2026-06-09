@@ -6,7 +6,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request, Response, status
 
-from app.core.auth import CurrentUserDep
+from app.core.auth import CsrfProtectedDep, CurrentUserDep
 from app.core.cookies import clear_session_cookie, set_session_cookie
 from app.core.deps import get_auth_service, get_csrf_service
 from app.core.config import settings
@@ -84,6 +84,7 @@ def examinee_entry(
 def logout(
     response: Response,
     current_user: CurrentUserDep,
+    _csrf: CsrfProtectedDep,
     auth_service: Annotated[AuthService, Depends(get_auth_service)],
 ) -> Response:
     auth_service.logout(

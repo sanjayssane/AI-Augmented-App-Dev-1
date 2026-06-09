@@ -71,6 +71,7 @@ class SessionQuestionResultOut(BaseModel):
 
 class SessionDetailOut(BaseModel):
     session_id: uuid.UUID
+    user_id: uuid.UUID
     status: SessionStatus
     score: int | None
     started_at: datetime
@@ -122,4 +123,5 @@ class ExaminerUserOut(BaseModel):
 
 class EraseExamineeResponse(BaseModel):
     user_id: uuid.UUID
+    job_id: uuid.UUID
     status: str = "accepted"

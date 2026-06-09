@@ -219,10 +219,16 @@ def test_auth_logout_clears_cookie(
         session_token="token-2",
         csrf_token="csrf-2",
     )
+    from app.core.auth import require_csrf
+
     app.dependency_overrides[get_current_user] = lambda: current_user
+    app.dependency_overrides[require_csrf] = lambda: current_user
     client_with_mock_services.cookies.set("session_id", "token-2")
 
-    response = client_with_mock_services.post("/api/v1/auth/logout")
+    response = client_with_mock_services.post(
+        "/api/v1/auth/logout",
+        headers={"X-CSRF-Token": current_user.csrf_token},
+    )
 
     assert response.status_code == 204
     set_cookie = response.headers.get("set-cookie", "")
@@ -230,6 +236,7 @@ def test_auth_logout_clears_cookie(
     assert "Max-Age=0" in set_cookie or "max-age=0" in set_cookie
     mock_auth_service.logout.assert_called_once()
     app.dependency_overrides.pop(get_current_user, None)
+    app.dependency_overrides.pop(require_csrf, None)
 
 
 @pytest.mark.skipif(not RUN_DB_TESTS, reason="Set RUN_DB_TESTS=1 with Postgres")

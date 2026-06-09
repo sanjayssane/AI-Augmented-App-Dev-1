@@ -25,7 +25,9 @@ class CsrfService:
     def validate_token(self, submitted_token: str | None, expected_token: str | None = None) -> None:
         if not submitted_token:
             raise CsrfValidationError()
-        if expected_token is not None and not secrets.compare_digest(submitted_token, expected_token):
-            raise CsrfValidationError()
+        if expected_token is not None:
+            if not secrets.compare_digest(submitted_token, expected_token):
+                raise CsrfValidationError()
+            return
         if not self._csrf_store.validate(submitted_token):
             raise CsrfValidationError()

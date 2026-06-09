@@ -83,3 +83,4 @@ class CurrentUserResponse(BaseModel):
     prn: str | None = None
     name: str | None = None
     username: str | None = None
+    is_admin: bool = False

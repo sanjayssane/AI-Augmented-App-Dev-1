@@ -205,12 +205,14 @@ class AuthService:
                 role=user.role,
                 prn=decrypt_field(user.prn_ciphertext),
                 name=decrypt_field(user.name_ciphertext),
+                is_admin=False,
             )
 
         return CurrentUserResponse(
             user_id=user.user_id,
             role=user.role,
             username=user.username,
+            is_admin=user.is_admin,
         )
 
     def _allow_examinee_retake(self) -> bool:

@@ -47,6 +47,7 @@ class User(Base):
     )
     password_hash: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
+    is_admin: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     privacy_acknowledged_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,

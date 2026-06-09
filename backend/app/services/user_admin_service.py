@@ -43,11 +43,13 @@ class UserAdminService:
         if password_error:
             raise ConflictError(password_error)
 
+        is_admin = self._user_repo.count_examiners(self._db) == 0
         created = self._user_repo.create_examiner(
             self._db,
             username=normalized_username,
             password_hash=hash_password(password),
             is_active=True,
+            is_admin=is_admin,
         )
         self._db.commit()
         self._db.refresh(created)

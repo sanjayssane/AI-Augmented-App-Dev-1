@@ -6,7 +6,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends
 
-from app.core.auth import ExaminerUserDep
+from app.core.auth import AdminExaminerDep, CsrfProtectedDep, ExaminerUserDep
 from app.core.deps import get_settings_service
 from app.core.request_id import get_request_id
 from app.schemas.common import SuccessResponse, success_envelope
@@ -35,7 +35,8 @@ def get_settings(
 @router.patch("", response_model=SuccessResponse[PlatformSettingsOut])
 def patch_settings(
     body: PlatformSettingsPatchRequest,
-    _examiner: ExaminerUserDep,
+    _admin: AdminExaminerDep,
+    _csrf: CsrfProtectedDep,
     settings_service: Annotated[SettingsService, Depends(get_settings_service)],
 ) -> SuccessResponse[PlatformSettingsOut]:
     view = settings_service.patch_settings(

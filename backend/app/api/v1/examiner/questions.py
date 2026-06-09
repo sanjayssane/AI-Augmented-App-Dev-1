@@ -7,7 +7,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Response, status
 
-from app.core.auth import ExaminerUserDep
+from app.core.auth import CsrfProtectedDep, ExaminerUserDep
 from app.core.deps import get_question_service
 from app.core.request_id import get_request_id
 from app.schemas.common import SuccessResponse, success_envelope
@@ -60,6 +60,7 @@ def list_questions(
 def create_question(
     body: QuestionCreateRequest,
     examiner: ExaminerUserDep,
+    _csrf: CsrfProtectedDep,
     question_service: Annotated[QuestionService, Depends(get_question_service)],
 ) -> SuccessResponse[QuestionOut]:
     created = question_service.create_question(
@@ -74,6 +75,7 @@ def patch_question(
     question_id: uuid.UUID,
     body: QuestionPatchRequest,
     examiner: ExaminerUserDep,
+    _csrf: CsrfProtectedDep,
     question_service: Annotated[QuestionService, Depends(get_question_service)],
 ) -> SuccessResponse[QuestionOut]:
     base = question_service.get_question(question_id=question_id)
@@ -102,6 +104,7 @@ def patch_question(
 def delete_question(
     question_id: uuid.UUID,
     _examiner: ExaminerUserDep,
+    _csrf: CsrfProtectedDep,
     question_service: Annotated[QuestionService, Depends(get_question_service)],
 ) -> None:
     question_service.delete_question(question_id=question_id)

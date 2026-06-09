@@ -74,6 +74,7 @@ def session_detail(
     return success_envelope(
         SessionDetailOut(
             session_id=detail.session_id,
+            user_id=detail.user_id,
             status=detail.status,
             score=detail.score,
             started_at=detail.started_at,

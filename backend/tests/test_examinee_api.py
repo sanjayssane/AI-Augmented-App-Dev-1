@@ -56,12 +56,13 @@ def client_with_mocks(
     mock_gdpr_service: MagicMock,
     examinee_user: CurrentUser,
 ) -> TestClient:
-    from app.core.auth import require_examinee
+    from app.core.auth import require_csrf, require_examinee
 
     app.dependency_overrides[get_test_session_service] = lambda: mock_test_session_service
     app.dependency_overrides[get_scoring_service] = lambda: mock_scoring_service
     app.dependency_overrides[get_gdpr_service] = lambda: mock_gdpr_service
     app.dependency_overrides[require_examinee] = lambda: examinee_user
+    app.dependency_overrides[require_csrf] = lambda: examinee_user
     with TestClient(app) as client:
         yield client
     app.dependency_overrides.clear()

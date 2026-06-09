@@ -6,13 +6,16 @@ import uuid
 from dataclasses import dataclass
 from typing import Annotated
 
-from fastapi import Depends, Request
+from fastapi import Depends, Header, Request
+from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.deps import get_session_store
+from app.core.deps import get_csrf_service, get_db, get_session_store, get_user_repository
 from app.models.enums import UserRole
 from app.repositories.redis.session_store import ServerSession, SessionStore
+from app.repositories.user_repository import UserRepository
 from app.schemas.errors import ForbiddenError, UnauthenticatedError
+from app.services.csrf_service import CsrfService
 
 
 @dataclass(frozen=True)
@@ -66,6 +69,28 @@ def require_examinee(
     return current_user
 
 
+def require_csrf(
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    csrf_service: Annotated[CsrfService, Depends(get_csrf_service)],
+    x_csrf_token: Annotated[str | None, Header(alias="X-CSRF-Token")] = None,
+) -> CurrentUser:
+    csrf_service.validate_token(x_csrf_token, expected_token=current_user.csrf_token)
+    return current_user
+
+
+def require_admin_examiner(
+    examiner: Annotated[CurrentUser, Depends(require_examiner)],
+    db: Annotated[Session, Depends(get_db)],
+    user_repo: Annotated[UserRepository, Depends(get_user_repository)],
+) -> CurrentUser:
+    user = user_repo.find_by_id(db, examiner.user_id)
+    if user is None or not user.is_admin:
+        raise ForbiddenError()
+    return examiner
+
+
 CurrentUserDep = Annotated[CurrentUser, Depends(get_current_user)]
 ExaminerUserDep = Annotated[CurrentUser, Depends(require_examiner)]
 ExamineeUserDep = Annotated[CurrentUser, Depends(require_examinee)]
+CsrfProtectedDep = Annotated[CurrentUser, Depends(require_csrf)]
+AdminExaminerDep = Annotated[CurrentUser, Depends(require_admin_examiner)]

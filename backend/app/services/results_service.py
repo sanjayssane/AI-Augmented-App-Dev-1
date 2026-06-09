@@ -41,6 +41,7 @@ class SessionQuestionResult:
 @dataclass
 class SessionDetail:
     session_id: uuid.UUID
+    user_id: uuid.UUID
     status: object
     score: int | None
     started_at: object
@@ -106,6 +107,7 @@ class ResultsService:
 
         return SessionDetail(
             session_id=session_row.session_id,
+            user_id=session_row.user_id,
             status=session_row.status,
             score=session_row.score,
             started_at=session_row.start_time,
