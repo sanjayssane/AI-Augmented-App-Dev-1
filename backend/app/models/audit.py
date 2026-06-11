@@ -31,7 +31,13 @@ class AuditLog(Base):
     resource_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
     resource_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     outcome: Mapped[AuditOutcome] = mapped_column(
-        Enum(AuditOutcome, name="audit_outcome", native_enum=True, create_constraint=True),
+        Enum(
+            AuditOutcome,
+            name="audit_outcome",
+            native_enum=True,
+            create_constraint=True,
+            values_callable=lambda enum: [member.value for member in enum],
+        ),
         nullable=False,
     )
     ip_address: Mapped[str | None] = mapped_column(INET, nullable=True)

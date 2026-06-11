@@ -30,12 +30,20 @@ class SettingsService:
         retention = self._settings_repo.get_value(self._db, self.RETENTION_KEY)
         retake = self._settings_repo.get_value(self._db, self.RETAKE_KEY)
         mode = self._settings_repo.get_value(self._db, self.SELECTION_MODE_KEY)
-        return PlatformSettingsView(
-            retention_days_completed=int(retention if retention is not None else 730),
-            allow_examinee_retake=bool(retake if retake is not None else False),
-            question_selection_mode=SelectionMode(
+        try:
+            retention_days = int(retention) if retention is not None else 730
+        except (TypeError, ValueError):
+            retention_days = 730
+        try:
+            selection_mode = SelectionMode(
                 mode if mode is not None else SelectionMode.FIXED_ORDER.value
-            ),
+            )
+        except ValueError:
+            selection_mode = SelectionMode.FIXED_ORDER
+        return PlatformSettingsView(
+            retention_days_completed=retention_days,
+            allow_examinee_retake=bool(retake if retake is not None else False),
+            question_selection_mode=selection_mode,
         )
 
     def get(self) -> PlatformSettingsView:

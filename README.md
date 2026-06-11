@@ -2,7 +2,7 @@
 
 Monorepo scaffold for the role-based MCQ examination system (Examinee + Examiner portals).
 
-**Documentation:** [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) · [docs/MCQ_Test_Platform_PRD.md](docs/MCQ_Test_Platform_PRD.md) · [docs/MCQ_Platform_ERD.md](docs/MCQ_Platform_ERD.md) · [docs/MCQ_Platform_Development_Plan.md](docs/MCQ_Platform_Development_Plan.md)
+**Documentation:** [docs/TECHNICAL_DOCUMENTATION.md](docs/TECHNICAL_DOCUMENTATION.md) · [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) · [docs/MCQ_Test_Platform_PRD.md](docs/MCQ_Test_Platform_PRD.md) · [docs/MCQ_Platform_ERD.md](docs/MCQ_Platform_ERD.md) · [docs/MCQ_Platform_Development_Plan.md](docs/MCQ_Platform_Development_Plan.md)
 
 **UX reference (read-only):** [SampleUI/](SampleUI/) — implement production UI in [frontend/](frontend/).
 

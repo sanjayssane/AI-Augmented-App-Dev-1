@@ -73,7 +73,7 @@ import {
   patchQuestion,
 } from "@/lib/api/examiner";
 import { useAuth } from "@/lib/auth";
-import { ApiError, getUserFacingMessage } from "@/lib/errors/problem";
+import { formatErrorMessage } from "@/lib/errors/problem";
 import { usePageTitle } from "@/lib/hooks/use-page-title";
 import type { CorrectOption, QuestionOut, SessionSummaryOut } from "@/lib/types";
 
@@ -120,7 +120,7 @@ export default function ExaminerDashboardPage() {
   useEffect(() => {
     Promise.all([loadQuestions(), loadSessions()])
       .catch((err) => {
-        setError(err instanceof Error ? err.message : "Failed to load data");
+        setError(formatErrorMessage(err, "Failed to load dashboard data."));
       })
       .finally(() => setLoading(false));
   }, [loadQuestions, loadSessions]);
@@ -157,7 +157,7 @@ export default function ExaminerDashboardPage() {
       setDialogOpen(false);
       await loadQuestions();
     } catch (err) {
-      setError(err instanceof ApiError ? getUserFacingMessage(err.problem) : "Save failed");
+      setError(formatErrorMessage(err, "Failed to save the question."));
     } finally {
       setSaving(false);
     }
@@ -165,19 +165,23 @@ export default function ExaminerDashboardPage() {
 
   const handleDeleteQuestion = async (questionId: string) => {
     if (!csrfToken) return;
+    setError("");
     try {
       await deleteQuestion(questionId, csrfToken);
       await loadQuestions();
     } catch (err) {
-      if (err instanceof ApiError) {
-        setError(getUserFacingMessage(err.problem));
-      }
+      setError(formatErrorMessage(err, "Failed to delete the question."));
     }
   };
 
   const handleExport = async () => {
-    const blob = await exportSessionsCsv(false);
-    downloadBlob(blob, "sessions-export.csv");
+    setError("");
+    try {
+      const blob = await exportSessionsCsv(false);
+      downloadBlob(blob, "sessions-export.csv");
+    } catch (err) {
+      setError(formatErrorMessage(err, "Failed to export sessions."));
+    }
   };
 
   const handleLogout = async () => {

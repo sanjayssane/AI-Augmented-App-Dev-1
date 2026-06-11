@@ -7,6 +7,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Flag,
+  LogOut,
   CheckCircle2,
   Circle,
 } from "lucide-react";
@@ -28,27 +29,33 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { RouteGuard } from "@/components/route-guard";
+import { useAuth } from "@/lib/auth";
 import { usePageTitle } from "@/lib/hooks/use-page-title";
 import { useTestSession } from "@/lib/hooks/use-test-session";
 import type { SelectedOption } from "@/lib/types";
 
 function TestPageContent() {
   const router = useRouter();
+  const { logout } = useAuth();
   const questionHeadingRef = useRef<HTMLHeadingElement>(null);
   const [showNavigator, setShowNavigator] = useState(true);
   const [answeredMap, setAnsweredMap] = useState<Set<number>>(new Set());
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   const {
     session,
     position,
     questionData,
     loading,
+    loadError,
     saveState,
     saveError,
     isSubmitting,
+    submitError,
     setPosition,
     saveAnswer,
     retrySave,
+    retryLoad,
     submitTest,
   } = useTestSession();
 
@@ -82,6 +89,16 @@ function TestPageContent() {
     if (result) router.push("/exam/results");
   };
 
+  const handleLogout = async () => {
+    setIsLoggingOut(true);
+    try {
+      await logout();
+      router.push("/");
+    } finally {
+      setIsLoggingOut(false);
+    }
+  };
+
   const formatExpires = (iso: string | undefined) => {
     if (!iso) return null;
     return new Date(iso).toLocaleString();
@@ -105,6 +122,12 @@ function TestPageContent() {
               Retry save
             </Button>
           </AlertDescription>
+        </Alert>
+      )}
+
+      {submitError && (
+        <Alert variant="destructive" className="rounded-none border-x-0 border-t-0">
+          <AlertDescription>{submitError}</AlertDescription>
         </Alert>
       )}
 
@@ -140,15 +163,42 @@ function TestPageContent() {
 
             <AlertDialog>
               <AlertDialogTrigger asChild>
+                <Button variant="outline" size="sm">
+                  <LogOut className="mr-2 h-4 w-4" />
+                  Logout
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Log out?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Your saved answers will be kept. You can resume this test later
+                    by entering your PRN again.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Stay in test</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={() => void handleLogout()}
+                    disabled={isLoggingOut}
+                  >
+                    {isLoggingOut ? "Logging out…" : "Log out"}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
                 <Button variant="destructive" size="sm">
                   <Flag className="mr-2 h-4 w-4" />
                   End Test
                 </Button>
               </AlertDialogTrigger>
-              <AlertDialogContent role="dialog" aria-modal="true">
+              <AlertDialogContent>
                 <AlertDialogHeader>
-                  <AlertDialogTitle id="end-test-title">End Test?</AlertDialogTitle>
-                  <AlertDialogDescription aria-labelledby="end-test-title">
+                  <AlertDialogTitle>End Test?</AlertDialogTitle>
+                  <AlertDialogDescription>
                     You have answered <strong>{answeredCount} of {totalQuestions}</strong>{" "}
                     questions.
                     {answeredCount < totalQuestions && (
@@ -278,7 +328,20 @@ function TestPageContent() {
           <div className="flex-1">
             <Card>
               <CardContent className="p-6 sm:p-8">
-                {loading || !questionData ? (
+                {loadError ? (
+                  <Alert variant="destructive">
+                    <AlertDescription className="flex flex-wrap items-center justify-between gap-2">
+                      <span>{loadError}</span>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => void retryLoad(position)}
+                      >
+                        Retry
+                      </Button>
+                    </AlertDescription>
+                  </Alert>
+                ) : loading || !questionData ? (
                   <p className="text-muted-foreground">Loading question…</p>
                 ) : (
                   <>

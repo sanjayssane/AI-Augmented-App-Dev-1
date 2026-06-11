@@ -7,7 +7,7 @@ import {
   submitSession,
 } from "@/lib/api/examinee";
 import { useAuth } from "@/lib/auth";
-import { ApiError } from "@/lib/errors/problem";
+import { ApiError, formatErrorMessage } from "@/lib/errors/problem";
 import { useStatusAnnouncer } from "@/components/status-announcer";
 import type {
   ExamineeQuestionAtPosition,
@@ -21,7 +21,7 @@ export function useTestSession() {
   const {
     examineeSession,
     csrfToken,
-    refreshCsrf,
+    refreshMe,
     refreshExamineeSession,
     setLastSubmitResult,
   } = useAuth();
@@ -34,9 +34,11 @@ export function useTestSession() {
   const [questionData, setQuestionData] =
     useState<ExamineeQuestionAtPosition | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const updatedAtRef = useRef<Record<string, string>>({});
   const idempotencyKeyRef = useRef<string | null>(null);
@@ -52,6 +54,7 @@ export function useTestSession() {
     async (pos: number) => {
       if (!session) return;
       setLoading(true);
+      setLoadError(null);
       try {
         const data = await fetchQuestionAtPosition(session.session_id, pos);
         setQuestionData(data);
@@ -60,6 +63,8 @@ export function useTestSession() {
             ? { ...prev, answered_count: data.answered_count }
             : prev,
         );
+      } catch (err) {
+        setLoadError(formatErrorMessage(err, "Failed to load the question."));
       } finally {
         setLoading(false);
       }
@@ -97,7 +102,12 @@ export function useTestSession() {
         try {
           result = await attemptSave(token);
         } catch (err) {
-          if (err instanceof ApiError && err.status === 409) {
+          if (err instanceof ApiError && err.status === 403) {
+            const profile = await refreshMe();
+            if (!profile?.csrf_token) throw err;
+            token = profile.csrf_token;
+            result = await attemptSave(token);
+          } else if (err instanceof ApiError && err.status === 409) {
             const refreshed = await fetchQuestionAtPosition(
               session.session_id,
               position,
@@ -129,15 +139,11 @@ export function useTestSession() {
         announcePolite("Answer saved");
       } catch (err) {
         setSaveState("error");
-        const message =
-          err instanceof ApiError
-            ? err.problem.detail ?? "Failed to save answer"
-            : "Failed to save answer";
-        setSaveError(message);
+        setSaveError(formatErrorMessage(err, "Failed to save your answer."));
         announcePolite("Save failed. Please retry.");
       }
     },
-    [session, questionData, csrfToken, position, announcePolite],
+    [session, questionData, csrfToken, position, announcePolite, refreshMe],
   );
 
   const retrySave = useCallback(async () => {
@@ -161,16 +167,30 @@ export function useTestSession() {
     if (!session || !csrfToken) return null;
 
     setIsSubmitting(true);
+    setSubmitError(null);
     try {
       let token = csrfToken;
       if (!idempotencyKeyRef.current) {
         idempotencyKeyRef.current = crypto.randomUUID();
       }
-      const result = await submitSession(
-        session.session_id,
-        token,
-        idempotencyKeyRef.current,
-      );
+
+      const attemptSubmit = async (csrf: string) =>
+        submitSession(session.session_id, csrf, idempotencyKeyRef.current!);
+
+      let result;
+      try {
+        result = await attemptSubmit(token);
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 403) {
+          const profile = await refreshMe();
+          if (!profile?.csrf_token) throw err;
+          token = profile.csrf_token;
+          result = await attemptSubmit(token);
+        } else {
+          throw err;
+        }
+      }
+
       setLastSubmitResult(result);
       const updated = await refreshExamineeSession();
       if (!updated) {
@@ -179,23 +199,28 @@ export function useTestSession() {
         );
       }
       return result;
+    } catch (err) {
+      setSubmitError(formatErrorMessage(err, "Failed to submit the test."));
+      return null;
     } finally {
       setIsSubmitting(false);
     }
-  }, [session, csrfToken, setLastSubmitResult, refreshExamineeSession]);
+  }, [session, csrfToken, setLastSubmitResult, refreshExamineeSession, refreshMe]);
 
   return {
     session,
     position,
     questionData,
     loading,
+    loadError,
     saveState,
     saveError,
     isSubmitting,
+    submitError,
     setPosition: goToPosition,
     saveAnswer,
     retrySave,
+    retryLoad: loadQuestion,
     submitTest,
-    refreshCsrf,
   };
 }

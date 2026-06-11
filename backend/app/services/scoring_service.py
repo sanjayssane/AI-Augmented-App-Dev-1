@@ -108,7 +108,7 @@ class ScoringService:
         correctness: dict[uuid.UUID, bool] = {}
         results: list[bool | None] = []
         for session_question, response in rows:
-            question_version = self._question_version_repo.get_by_question_and_version(
+            question_version = self._question_version_repo.resolve_for_scoring(
                 self._db,
                 question_id=session_question.question_id,
                 version_number=session_question.question_version_snapshot,
@@ -116,7 +116,10 @@ class ScoringService:
             if question_version is None:
                 raise NotFoundError("Question version snapshot not found.")
 
-            result = is_response_correct(response.selected_option, question_version.correct_option)
+            result = is_response_correct(
+                response.selected_option,
+                question_version.correct_option,
+            )
             results.append(result)
             correctness[session_question.question_id] = bool(result) if result is not None else False
 

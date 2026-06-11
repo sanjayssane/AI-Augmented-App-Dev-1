@@ -66,6 +66,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const refreshMe = useCallback(async () => {
     const profile = await fetchCurrentUser();
     setUser(profile);
+    if (profile?.csrf_token) {
+      setCsrfToken(profile.csrf_token);
+    }
     return profile;
   }, []);
 
@@ -84,12 +87,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     (async () => {
       try {
-        const token = await fetchCsrfToken();
+        const bootstrapCsrf = await fetchCsrfToken();
         if (cancelled) return;
-        setCsrfToken(token);
+        setCsrfToken(bootstrapCsrf);
         const profile = await fetchCurrentUser();
         if (cancelled) return;
         setUser(profile);
+        if (profile?.csrf_token) {
+          setCsrfToken(profile.csrf_token);
+        }
         if (profile?.role === "EXAMINEE") {
           try {
             const session = await fetchCurrentSession();

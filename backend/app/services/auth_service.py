@@ -192,7 +192,13 @@ class AuthService:
     def logout(self, *, session_token: str, user_id: uuid.UUID) -> None:
         self._session_store.delete_session(session_token, user_id)
 
-    def get_current_user_profile(self, *, user_id: uuid.UUID, role: UserRole) -> CurrentUserResponse:
+    def get_current_user_profile(
+        self,
+        *,
+        user_id: uuid.UUID,
+        role: UserRole,
+        csrf_token: str,
+    ) -> CurrentUserResponse:
         user = self._user_repo.find_by_id(self._db, user_id)
         if user is None:
             raise UnauthenticatedError()
@@ -203,6 +209,7 @@ class AuthService:
             return CurrentUserResponse(
                 user_id=user.user_id,
                 role=user.role,
+                csrf_token=csrf_token,
                 prn=decrypt_field(user.prn_ciphertext),
                 name=decrypt_field(user.name_ciphertext),
                 is_admin=False,
@@ -211,6 +218,7 @@ class AuthService:
         return CurrentUserResponse(
             user_id=user.user_id,
             role=user.role,
+            csrf_token=csrf_token,
             username=user.username,
             is_admin=user.is_admin,
         )
@@ -247,7 +255,11 @@ class AuthService:
             self._db,
             limit=max(active_question_count, SESSION_QUESTION_COUNT),
         )
-        selected_questions = select_questions(questions, mode)
+        try:
+            selected_questions = select_questions(questions, mode)
+        except ValueError as exc:
+            # Bank shrank between the count check and selection; surface as 503.
+            raise InsufficientQuestionBankError() from exc
 
         now = datetime.now(UTC)
         expires_at = session_expires_at(now)

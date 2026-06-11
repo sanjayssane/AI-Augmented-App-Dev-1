@@ -5,23 +5,57 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class FieldError(BaseModel):
-    field: str
-    message: str
+    """A single field-level validation failure."""
+
+    field: str = Field(
+        description="Dotted path of the invalid request field.",
+        examples=["username"],
+    )
+    message: str = Field(
+        description="Human-readable description of the validation failure.",
+        examples=["String should have at least 1 character"],
+    )
 
 
 class ProblemDetails(BaseModel):
-    type: str
-    title: str
-    status: int
-    detail: str | None = None
-    instance: str | None = None
-    request_id: str | None = None
-    errors: list[FieldError] | None = None
-    locked_until: datetime | None = None
+    """RFC 7807 problem details returned with content type application/problem+json."""
+
+    type: str = Field(
+        description="URI identifying the problem type.",
+        examples=["https://api.example.com/problems/unauthenticated"],
+    )
+    title: str = Field(
+        description="Short, human-readable summary of the problem type.",
+        examples=["Unauthenticated"],
+    )
+    status: int = Field(description="HTTP status code.", examples=[401])
+    detail: str | None = Field(
+        default=None,
+        description="Human-readable explanation specific to this occurrence.",
+        examples=["Authentication required."],
+    )
+    instance: str | None = Field(
+        default=None,
+        description="Request path on which the problem occurred.",
+        examples=["/api/v1/auth/me"],
+    )
+    request_id: str | None = Field(
+        default=None,
+        description="Request identifier for log correlation; matches X-Request-Id.",
+        examples=["9f1b2c3d4e5f6a7b"],
+    )
+    errors: list[FieldError] | None = Field(
+        default=None,
+        description="Field-level validation errors (only on 400 validation failures).",
+    )
+    locked_until: datetime | None = Field(
+        default=None,
+        description="When a locked account becomes available again (only on 423 responses).",
+    )
 
     def model_dump(self, **kwargs: Any) -> dict[str, Any]:
         data = super().model_dump(**kwargs)

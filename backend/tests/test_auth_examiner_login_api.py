@@ -198,6 +198,7 @@ def test_auth_me_returns_current_user_profile(
     mock_auth_service.get_current_user_profile.return_value = CurrentUserResponse(
         user_id=current_user.user_id,
         role=UserRole.EXAMINEE,
+        csrf_token=current_user.csrf_token,
         prn="STU2024001",
         name="Jane Doe",
     )
@@ -205,7 +206,9 @@ def test_auth_me_returns_current_user_profile(
     response = client_with_mock_services.get("/api/v1/auth/me")
 
     assert response.status_code == 200
-    assert response.json()["data"]["prn"] == "STU2024001"
+    body = response.json()["data"]
+    assert body["prn"] == "STU2024001"
+    assert body["csrf_token"] == current_user.csrf_token
     app.dependency_overrides.pop(get_current_user, None)
 
 

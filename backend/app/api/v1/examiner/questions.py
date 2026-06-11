@@ -7,6 +7,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Response, status
 
+from app.api.openapi import SECURITY_SESSION, SECURITY_SESSION_CSRF, problem_responses
 from app.core.auth import CsrfProtectedDep, ExaminerUserDep
 from app.core.deps import get_question_service
 from app.core.request_id import get_request_id
@@ -37,14 +38,32 @@ def _to_out(row) -> QuestionOut:
     )
 
 
-@router.get("", response_model=SuccessResponse[QuestionListData])
+@router.get(
+    "",
+    response_model=SuccessResponse[QuestionListData],
+    summary="List questions",
+    response_description="A page of questions plus the total active question count.",
+    responses=problem_responses(400, 401, 403),
+    openapi_extra=SECURITY_SESSION,
+)
 def list_questions(
     _examiner: ExaminerUserDep,
     question_service: Annotated[QuestionService, Depends(get_question_service)],
-    limit: int = Query(default=50, ge=1, le=100),
-    cursor: uuid.UUID | None = Query(default=None),
-    include_deleted: bool = Query(default=False),
+    limit: int = Query(default=50, ge=1, le=100, description="Page size (1-100)."),
+    cursor: uuid.UUID | None = Query(
+        default=None,
+        description="Cursor for pagination — pass the `next_cursor` from the previous page.",
+    ),
+    include_deleted: bool = Query(
+        default=False,
+        description="Include soft-deleted questions in the listing.",
+    ),
 ) -> SuccessResponse[QuestionListData]:
+    """List question bank entries with cursor-based pagination.
+
+    Includes the correct answer for each question (examiner view) and the
+    current `active_count` of non-deleted questions.
+    """
     rows, next_cursor, active_count = question_service.list_questions(
         limit=limit,
         cursor=cursor,
@@ -56,13 +75,25 @@ def list_questions(
     )
 
 
-@router.post("", status_code=status.HTTP_201_CREATED, response_model=SuccessResponse[QuestionOut])
+@router.post(
+    "",
+    status_code=status.HTTP_201_CREATED,
+    response_model=SuccessResponse[QuestionOut],
+    summary="Create a question",
+    response_description="The newly created question.",
+    responses=problem_responses(400, 401, 403),
+    openapi_extra=SECURITY_SESSION_CSRF,
+)
 def create_question(
     body: QuestionCreateRequest,
     examiner: ExaminerUserDep,
     _csrf: CsrfProtectedDep,
     question_service: Annotated[QuestionService, Depends(get_question_service)],
 ) -> SuccessResponse[QuestionOut]:
+    """Add a multiple-choice question (four options, one correct) to the bank.
+
+    Requires an examiner session and the `X-CSRF-Token` header.
+    """
     created = question_service.create_question(
         payload=QuestionPayload(**body.model_dump()),
         created_by=examiner.user_id,
@@ -70,7 +101,14 @@ def create_question(
     return success_envelope(_to_out(created), request_id=get_request_id())
 
 
-@router.patch("/{question_id}", response_model=SuccessResponse[QuestionOut])
+@router.patch(
+    "/{question_id}",
+    response_model=SuccessResponse[QuestionOut],
+    summary="Update a question",
+    response_description="The updated question with an incremented version.",
+    responses=problem_responses(400, 401, 403, 404),
+    openapi_extra=SECURITY_SESSION_CSRF,
+)
 def patch_question(
     question_id: uuid.UUID,
     body: QuestionPatchRequest,
@@ -78,6 +116,12 @@ def patch_question(
     _csrf: CsrfProtectedDep,
     question_service: Annotated[QuestionService, Depends(get_question_service)],
 ) -> SuccessResponse[QuestionOut]:
+    """Partially update a question; omitted fields keep their current values.
+
+    Each edit creates a new question version so in-flight test sessions keep
+    referencing the version they were served. Requires an examiner session
+    and the `X-CSRF-Token` header.
+    """
     base = question_service.get_question(question_id=question_id)
     data = {
         "question_text": body.question_text if body.question_text is not None else base.question_text,
@@ -100,6 +144,21 @@ def patch_question(
     status_code=status.HTTP_204_NO_CONTENT,
     response_model=None,
     response_class=Response,
+    summary="Soft-delete a question",
+    response_description="Question soft-deleted.",
+    responses=problem_responses(
+        401,
+        403,
+        404,
+        409,
+        overrides={
+            409: {
+                "description": "Deletion would reduce the active question bank below the "
+                "required minimum (default 50)."
+            }
+        },
+    ),
+    openapi_extra=SECURITY_SESSION_CSRF,
 )
 def delete_question(
     question_id: uuid.UUID,
@@ -107,4 +166,10 @@ def delete_question(
     _csrf: CsrfProtectedDep,
     question_service: Annotated[QuestionService, Depends(get_question_service)],
 ) -> None:
+    """Soft-delete a question (it is excluded from new tests but retained for history).
+
+    Rejected with 409 if it would drop the active bank below the minimum
+    required for test generation. Requires an examiner session and the
+    `X-CSRF-Token` header.
+    """
     question_service.delete_question(question_id=question_id)

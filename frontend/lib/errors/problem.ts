@@ -54,9 +54,27 @@ const USER_MESSAGES: Record<string, string> = {
 
 export function getUserFacingMessage(problem: ProblemDetails): string {
   const suffix = problem.type.split("/").pop() ?? "";
-  if (USER_MESSAGES[suffix]) return USER_MESSAGES[suffix];
-  if (problem.errors?.length) {
-    return problem.errors.map((e) => e.message).join(" ");
+  let message: string;
+  if (USER_MESSAGES[suffix]) {
+    message = USER_MESSAGES[suffix];
+  } else if (problem.errors?.length) {
+    message = problem.errors.map((e) => e.message).join(" ");
+  } else {
+    message = problem.detail ?? problem.title;
   }
-  return problem.detail ?? problem.title;
+  return `${message} (Error ${problem.status})`;
+}
+
+/**
+ * Format any caught error into a user-facing message. ApiError instances
+ * include their HTTP status code; other errors use the provided fallback.
+ */
+export function formatErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof ApiError) {
+    return getUserFacingMessage(error.problem);
+  }
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+  return fallback;
 }

@@ -41,7 +41,7 @@ import {
   patchSettings,
 } from "@/lib/api/examiner";
 import { useAuth } from "@/lib/auth";
-import { ApiError, getUserFacingMessage } from "@/lib/errors/problem";
+import { formatErrorMessage } from "@/lib/errors/problem";
 import { usePageTitle } from "@/lib/hooks/use-page-title";
 import type { PlatformSettingsOut, SelectionMode } from "@/lib/types";
 
@@ -70,7 +70,7 @@ export default function SettingsPage() {
         setSelectionMode(data.question_selection_mode);
       })
       .catch((err) =>
-        setError(err instanceof Error ? err.message : "Failed to load settings"),
+        setError(formatErrorMessage(err, "Failed to load settings.")),
       );
   }, []);
 
@@ -87,9 +87,7 @@ export default function SettingsPage() {
       setSettings(updated);
       setMessage("Settings saved successfully.");
     } catch (err) {
-      setError(
-        err instanceof ApiError ? getUserFacingMessage(err.problem) : "Save failed",
-      );
+      setError(formatErrorMessage(err, "Failed to save settings."));
     } finally {
       setSaving(false);
     }
@@ -109,9 +107,7 @@ export default function SettingsPage() {
       setNewUsername("");
       setNewPassword("");
     } catch (err) {
-      setError(
-        err instanceof ApiError ? getUserFacingMessage(err.problem) : "Create failed",
-      );
+      setError(formatErrorMessage(err, "Failed to create the examiner."));
     } finally {
       setSaving(false);
     }
@@ -119,9 +115,14 @@ export default function SettingsPage() {
 
   const handleErase = async () => {
     if (!csrfToken || !isAdmin || !eraseUserId) return;
-    const result = await eraseExaminee(eraseUserId, csrfToken);
-    setMessage(`Erasure job accepted (job ${result.job_id}).`);
-    setEraseUserId("");
+    setError("");
+    try {
+      const result = await eraseExaminee(eraseUserId, csrfToken);
+      setMessage(`Erasure job accepted (job ${result.job_id}).`);
+      setEraseUserId("");
+    } catch (err) {
+      setError(formatErrorMessage(err, "Failed to start the erasure job."));
+    }
   };
 
   if (!isAdmin) {

@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "MCQ Online Test Platform API",
-    "description": "Role-based examination system API (Phase 0 scaffold).",
+    "description": "Role-based REST API for the MCQ Online Test Platform: examiners manage a\nquestion bank and review results, while examinees take a 50-question\nmultiple-choice test.\n\n## Roles\n\n| Role | How authenticated | Capabilities |\n|------|-------------------|--------------|\n| **Examinee** | `POST /auth/examinee/entry` (PRN + name) | Take the test, review answers, export own data |\n| **Examiner** | `POST /auth/examiner/login` (username + password) | Manage questions, view session results, read settings |\n| **Admin examiner** | Examiner login with admin flag | Additionally create examiners, update settings, request GDPR erasure |\n\n## Authentication\n\nAuthentication uses an **opaque server-side session** stored in Redis and\ndelivered via an HttpOnly `session_id` cookie (path `/api/v1`,\n`SameSite=strict`). There are no bearer tokens. Cookies are set by the login\nand entry endpoints and cleared by `POST /auth/logout`.\n\n## CSRF protection\n\nAll mutating endpoints (POST/PUT/PATCH/DELETE) on authenticated routes\nrequire the `X-CSRF-Token` header. The session-bound token is returned by\n`GET /auth/me`; a pre-login token for the login forms is available from\n`GET /auth/csrf`.\n\n## Response conventions\n\n- **Success** responses wrap the payload in an envelope:\n  `{ \"data\": ..., \"meta\": { \"request_id\": \"...\" } }`.\n- **Errors** are returned as RFC 7807 problem details with content type\n  `application/problem+json` (see the `ProblemDetails` schema). Validation\n  failures return **400** with a field-level `errors` array.\n- Every response carries an `X-Request-Id` header that matches\n  `meta.request_id`, for log correlation.\n- File downloads (data export, CSV export) bypass the envelope and return\n  raw content with a `Content-Disposition: attachment` header.",
     "version": "0.1.0"
   },
   "paths": {
@@ -11,12 +11,12 @@
         "tags": [
           "health"
         ],
-        "summary": "Health",
-        "description": "Liveness probe \u2014 no external dependencies.",
+        "summary": "Liveness probe",
+        "description": "Liveness probe \u2014 returns 200 as long as the process is running.\n\nPerforms no external dependency checks; use `/ready` for that.",
         "operationId": "health_api_v1_health_get",
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "The service process is up.",
             "content": {
               "application/json": {
                 "schema": {
@@ -25,6 +25,9 @@
                   },
                   "type": "object",
                   "title": "Response Health Api V1 Health Get"
+                },
+                "example": {
+                  "status": "ok"
                 }
               }
             }
@@ -37,12 +40,12 @@
         "tags": [
           "health"
         ],
-        "summary": "Ready",
-        "description": "Readiness probe \u2014 PostgreSQL and Redis connectivity.",
+        "summary": "Readiness probe",
+        "description": "Readiness probe \u2014 verifies PostgreSQL and Redis connectivity.\n\nReturns **503** with per-dependency flags when any check fails, so\norchestrators can stop routing traffic to this instance.",
         "operationId": "ready_api_v1_ready_get",
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "All dependencies (PostgreSQL, Redis) are reachable.",
             "content": {
               "application/json": {
                 "schema": {
@@ -58,6 +61,23 @@
                   },
                   "type": "object",
                   "title": "Response Ready Api V1 Ready Get"
+                },
+                "example": {
+                  "status": "ok",
+                  "database": true,
+                  "redis": true
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "One or more dependencies are unreachable.",
+            "content": {
+              "application/json": {
+                "example": {
+                  "status": "unavailable",
+                  "database": true,
+                  "redis": false
                 }
               }
             }
@@ -70,11 +90,12 @@
         "tags": [
           "auth"
         ],
-        "summary": "Get Csrf Token",
+        "summary": "Issue a pre-login CSRF token",
+        "description": "Issue a standalone CSRF token for pre-authentication flows.\n\nUse the returned token in the `X-CSRF-Token` header when calling the login\nand entry endpoints from a browser form. After authentication, prefer the\nsession-bound token returned by `GET /auth/me`.",
         "operationId": "get_csrf_token_api_v1_auth_csrf_get",
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "A short-lived CSRF token for unauthenticated flows.",
             "content": {
               "application/json": {
                 "schema": {
@@ -91,7 +112,8 @@
         "tags": [
           "auth"
         ],
-        "summary": "Examiner Login",
+        "summary": "Examiner login",
+        "description": "Authenticate an examiner with username and password.\n\nOn success an HttpOnly `session_id` cookie (1 hour TTL) is set on the\nresponse. After 5 failed attempts within 15 minutes the account is\ntemporarily locked (423) and `locked_until` indicates when it reopens.",
         "operationId": "examiner_login_api_v1_auth_examiner_login_post",
         "requestBody": {
           "content": {
@@ -105,11 +127,72 @@
         },
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Examiner profile; the session cookie is set on the response.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SuccessResponse_ExaminerLoginResponse_"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error \u2014 one or more request fields are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "example": {
+                  "type": "https://api.example.com/problems/validation-error",
+                  "title": "Validation Error",
+                  "status": 400,
+                  "detail": "One or more fields failed validation.",
+                  "instance": "/api/v1/...",
+                  "request_id": "9f1b2c3d4e5f6a7b",
+                  "errors": [
+                    {
+                      "field": "username",
+                      "message": "String should have at least 1 character"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid username or password.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "example": {
+                  "type": "https://api.example.com/problems/invalid-credentials",
+                  "title": "Invalid Credentials",
+                  "status": 401,
+                  "detail": "Invalid username or password",
+                  "instance": "/api/v1/auth/examiner/login",
+                  "request_id": "9f1b2c3d4e5f6a7b"
+                }
+              }
+            }
+          },
+          "423": {
+            "description": "Account locked after too many failed login attempts.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "example": {
+                  "type": "https://api.example.com/problems/locked",
+                  "title": "Account Locked",
+                  "status": 423,
+                  "detail": "This account is temporarily locked due to too many failed login attempts.",
+                  "instance": "/api/v1/...",
+                  "request_id": "9f1b2c3d4e5f6a7b",
+                  "locked_until": "2026-01-01T12:30:00Z"
                 }
               }
             }
@@ -132,7 +215,8 @@
         "tags": [
           "auth"
         ],
-        "summary": "Examinee Entry",
+        "summary": "Examinee entry (register or resume)",
+        "description": "Register a new examinee or resume an in-progress test session.\n\nIdentified by PRN (registration number) and name; privacy acknowledgement\nis mandatory. Returns **201** when a new account and session are created,\n**200** when an existing in-progress session is resumed. An HttpOnly\n`session_id` cookie (4 hour TTL) is set on the response. Registration is\nrate-limited per IP (429).",
         "operationId": "examinee_entry_api_v1_auth_examinee_entry_post",
         "requestBody": {
           "content": {
@@ -146,11 +230,117 @@
         },
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "The active test session for the examinee (existing session resumed).",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/app__schemas__common__SuccessResponse_ExamineeSessionResource___1"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "A new examinee account and test session were created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/app__schemas__common__SuccessResponse_ExamineeSessionResource___1"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error \u2014 one or more request fields are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "example": {
+                  "type": "https://api.example.com/problems/validation-error",
+                  "title": "Validation Error",
+                  "status": 400,
+                  "detail": "One or more fields failed validation.",
+                  "instance": "/api/v1/...",
+                  "request_id": "9f1b2c3d4e5f6a7b",
+                  "errors": [
+                    {
+                      "field": "username",
+                      "message": "String should have at least 1 character"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Identity mismatch \u2014 the PRN exists but the name does not match.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "example": {
+                  "type": "https://api.example.com/problems/identity-mismatch",
+                  "title": "Identity Mismatch",
+                  "status": 403,
+                  "detail": "The provided details do not match our records.",
+                  "instance": "/api/v1/auth/examinee/entry",
+                  "request_id": "9f1b2c3d4e5f6a7b"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "This registration number has already completed the test (retakes disabled).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "example": {
+                  "type": "https://api.example.com/problems/exam-already-completed",
+                  "title": "Exam Already Completed",
+                  "status": 409,
+                  "detail": "This registration number has already completed the test.",
+                  "instance": "/api/v1/auth/examinee/entry",
+                  "request_id": "9f1b2c3d4e5f6a7b"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded \u2014 retry after the indicated delay.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "example": {
+                  "type": "https://api.example.com/problems/rate-limit-exceeded",
+                  "title": "Rate Limit Exceeded",
+                  "status": 429,
+                  "detail": "Too many requests. Please try again later.",
+                  "instance": "/api/v1/...",
+                  "request_id": "9f1b2c3d4e5f6a7b"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service unavailable \u2014 a required dependency or resource is not ready.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "example": {
+                  "type": "https://api.example.com/problems/service-unavailable",
+                  "title": "Insufficient Question Bank",
+                  "status": 503,
+                  "detail": "The question bank does not have enough active questions.",
+                  "instance": "/api/v1/...",
+                  "request_id": "9f1b2c3d4e5f6a7b"
                 }
               }
             }
@@ -173,13 +363,84 @@
         "tags": [
           "auth"
         ],
-        "summary": "Logout",
+        "summary": "Log out",
+        "description": "Invalidate the current session server-side and clear the session cookie.\n\nRequires an authenticated session and the `X-CSRF-Token` header.",
         "operationId": "logout_api_v1_auth_logout_post",
+        "parameters": [
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Csrf-Token"
+            }
+          }
+        ],
         "responses": {
           "204": {
-            "description": "Successful Response"
+            "description": "Session invalidated; the session cookie is cleared."
+          },
+          "401": {
+            "description": "Unauthenticated \u2014 missing or expired session cookie.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "example": {
+                  "type": "https://api.example.com/problems/unauthenticated",
+                  "title": "Unauthenticated",
+                  "status": 401,
+                  "detail": "Authentication required.",
+                  "instance": "/api/v1/...",
+                  "request_id": "9f1b2c3d4e5f6a7b"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden \u2014 insufficient role or CSRF token validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "example": {
+                  "type": "https://api.example.com/problems/forbidden",
+                  "title": "Forbidden",
+                  "status": 403,
+                  "detail": "You do not have permission to perform this action.",
+                  "instance": "/api/v1/...",
+                  "request_id": "9f1b2c3d4e5f6a7b"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
           }
-        }
+        },
+        "security": [
+          {
+            "sessionCookie": [],
+            "csrfToken": []
+          }
+        ]
       }
     },
     "/api/v1/auth/me": {
@@ -187,11 +448,12 @@
         "tags": [
           "auth"
         ],
-        "summary": "Get Current User Profile",
+        "summary": "Get current user profile",
+        "description": "Return the authenticated user's profile and session-bound CSRF token.\n\nRole-specific fields are populated: `username`/`is_admin` for examiners,\n`prn`/`name` for examinees. Use `csrf_token` in the `X-CSRF-Token` header\non subsequent mutating requests.",
         "operationId": "get_current_user_profile_api_v1_auth_me_get",
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Profile of the authenticated user, including the session CSRF token.",
             "content": {
               "application/json": {
                 "schema": {
@@ -199,8 +461,31 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "Unauthenticated \u2014 missing or expired session cookie.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "example": {
+                  "type": "https://api.example.com/problems/unauthenticated",
+                  "title": "Unauthenticated",
+                  "status": 401,
+                  "detail": "Authentication required.",
+                  "instance": "/api/v1/...",
+                  "request_id": "9f1b2c3d4e5f6a7b"
+                }
+              }
+            }
           }
-        }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
       }
     },
     "/api/v1/examinee/sessions/current": {
@@ -208,11 +493,12 @@
         "tags": [
           "examinee"
         ],
-        "summary": "Get Current Session",
+        "summary": "Get current test session",
+        "description": "Return the examinee's active (in-progress) test session.\n\nIncludes progress (`answered_count`, `current_position`) and the session\nexpiry time. Use this to resume a test after a page reload.",
         "operationId": "get_current_session_api_v1_examinee_sessions_current_get",
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Summary of the examinee's active test session.",
             "content": {
               "application/json": {
                 "schema": {
@@ -220,8 +506,67 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "Unauthenticated \u2014 missing or expired session cookie.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "example": {
+                  "type": "https://api.example.com/problems/unauthenticated",
+                  "title": "Unauthenticated",
+                  "status": 401,
+                  "detail": "Authentication required.",
+                  "instance": "/api/v1/...",
+                  "request_id": "9f1b2c3d4e5f6a7b"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden \u2014 insufficient role or CSRF token validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "example": {
+                  "type": "https://api.example.com/problems/forbidden",
+                  "title": "Forbidden",
+                  "status": 403,
+                  "detail": "You do not have permission to perform this action.",
+                  "instance": "/api/v1/...",
+                  "request_id": "9f1b2c3d4e5f6a7b"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No active test session was found for this examinee.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "example": {
+                  "type": "https://api.example.com/problems/not-found",
+                  "title": "Not Found",
+                  "status": 404,
+                  "detail": "The requested resource was not found.",
+                  "instance": "/api/v1/...",
+                  "request_id": "9f1b2c3d4e5f6a7b"
+                }
+              }
+            }
           }
-        }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
       }
     },
     "/api/v1/examinee/sessions/{session_id}/questions/{position}": {
@@ -229,7 +574,8 @@
         "tags": [
           "examinee"
         ],
-        "summary": "Get Question At Position",
+        "summary": "Get question at position",
+        "description": "Fetch the question at a given position (1-50) in the examinee's session.\n\nThe correct answer is never included. The response also returns the\nexaminee's previously selected option for that question, if any.",
         "operationId": "get_question_at_position_api_v1_examinee_sessions__session_id__questions__position__get",
         "parameters": [
           {
@@ -254,11 +600,89 @@
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "The question at the requested position, with any previously selected option.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SuccessResponse_ExamineeQuestionAtPositionResource_"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error \u2014 one or more request fields are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "example": {
+                  "type": "https://api.example.com/problems/validation-error",
+                  "title": "Validation Error",
+                  "status": 400,
+                  "detail": "One or more fields failed validation.",
+                  "instance": "/api/v1/...",
+                  "request_id": "9f1b2c3d4e5f6a7b",
+                  "errors": [
+                    {
+                      "field": "username",
+                      "message": "String should have at least 1 character"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated \u2014 missing or expired session cookie.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "example": {
+                  "type": "https://api.example.com/problems/unauthenticated",
+                  "title": "Unauthenticated",
+                  "status": 401,
+                  "detail": "Authentication required.",
+                  "instance": "/api/v1/...",
+                  "request_id": "9f1b2c3d4e5f6a7b"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden \u2014 insufficient role or CSRF token validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "example": {
+                  "type": "https://api.example.com/problems/forbidden",
+                  "title": "Forbidden",
+                  "status": 403,
+                  "detail": "You do not have permission to perform this action.",
+                  "instance": "/api/v1/...",
+                  "request_id": "9f1b2c3d4e5f6a7b"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "example": {
+                  "type": "https://api.example.com/problems/not-found",
+                  "title": "Not Found",
+                  "status": 404,
+                  "detail": "The requested resource was not found.",
+                  "instance": "/api/v1/...",
+                  "request_id": "9f1b2c3d4e5f6a7b"
                 }
               }
             }
@@ -273,7 +697,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
       }
     },
     "/api/v1/examinee/sessions/{session_id}/responses/{question_id}": {
@@ -281,7 +710,8 @@
         "tags": [
           "examinee"
         ],
-        "summary": "Save Response",
+        "summary": "Save or update an answer",
+        "description": "Save, change, or clear the selected option for a question.\n\nSend `selected_option: null` to clear an answer. Requires the\n`X-CSRF-Token` header. Supports optimistic concurrency via the\n`If-Unmodified-Since` header.",
         "operationId": "save_response_api_v1_examinee_sessions__session_id__responses__question_id__put",
         "parameters": [
           {
@@ -317,7 +747,25 @@
                   "type": "null"
                 }
               ],
+              "description": "Optional optimistic-concurrency guard (RFC 9110 HTTP-date). If the stored response was updated after this timestamp, the save is rejected with 409.",
               "title": "If-Unmodified-Since"
+            },
+            "description": "Optional optimistic-concurrency guard (RFC 9110 HTTP-date). If the stored response was updated after this timestamp, the save is rejected with 409."
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Csrf-Token"
             }
           }
         ],
@@ -333,11 +781,107 @@
         },
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "The saved response and the updated answered count.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SuccessResponse_SaveResponseResult_"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error \u2014 one or more request fields are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "example": {
+                  "type": "https://api.example.com/problems/validation-error",
+                  "title": "Validation Error",
+                  "status": 400,
+                  "detail": "One or more fields failed validation.",
+                  "instance": "/api/v1/...",
+                  "request_id": "9f1b2c3d4e5f6a7b",
+                  "errors": [
+                    {
+                      "field": "username",
+                      "message": "String should have at least 1 character"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated \u2014 missing or expired session cookie.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "example": {
+                  "type": "https://api.example.com/problems/unauthenticated",
+                  "title": "Unauthenticated",
+                  "status": 401,
+                  "detail": "Authentication required.",
+                  "instance": "/api/v1/...",
+                  "request_id": "9f1b2c3d4e5f6a7b"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden \u2014 insufficient role or CSRF token validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "example": {
+                  "type": "https://api.example.com/problems/forbidden",
+                  "title": "Forbidden",
+                  "status": 403,
+                  "detail": "You do not have permission to perform this action.",
+                  "instance": "/api/v1/...",
+                  "request_id": "9f1b2c3d4e5f6a7b"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "example": {
+                  "type": "https://api.example.com/problems/not-found",
+                  "title": "Not Found",
+                  "status": 404,
+                  "detail": "The requested resource was not found.",
+                  "instance": "/api/v1/...",
+                  "request_id": "9f1b2c3d4e5f6a7b"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Concurrency conflict \u2014 the response was modified after the timestamp given in If-Unmodified-Since.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "example": {
+                  "type": "https://api.example.com/problems/conflict",
+                  "title": "Conflict",
+                  "status": 409,
+                  "detail": "The resource was modified by another request.",
+                  "instance": "/api/v1/...",
+                  "request_id": "9f1b2c3d4e5f6a7b"
                 }
               }
             }
@@ -352,7 +896,13 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "sessionCookie": [],
+            "csrfToken": []
+          }
+        ]
       }
     },
     "/api/v1/examinee/sessions/{session_id}/submit": {
@@ -360,7 +910,8 @@
         "tags": [
           "examinee"
         ],
-        "summary": "Submit Session",
+        "summary": "Submit the test for scoring",
+        "description": "Submit the test session for scoring. This action is irreversible.\n\nThe request body must include `confirm: true`. Requires the\n`X-CSRF-Token` header. Pass an `Idempotency-Key` header to make retries\nsafe \u2014 duplicate submissions with the same key return the original score.",
         "operationId": "submit_session_api_v1_examinee_sessions__session_id__submit_post",
         "parameters": [
           {
@@ -386,7 +937,25 @@
                   "type": "null"
                 }
               ],
+              "description": "Optional client-generated key making the submission retry-safe: repeated submits with the same key return the original result instead of failing.",
               "title": "Idempotency-Key"
+            },
+            "description": "Optional client-generated key making the submission retry-safe: repeated submits with the same key return the original result instead of failing."
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Csrf-Token"
             }
           }
         ],
@@ -402,11 +971,107 @@
         },
         "responses": {
           "201": {
-            "description": "Successful Response",
+            "description": "Final score breakdown for the submitted session.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SuccessResponse_SubmitSessionResult_"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error \u2014 one or more request fields are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "example": {
+                  "type": "https://api.example.com/problems/validation-error",
+                  "title": "Validation Error",
+                  "status": 400,
+                  "detail": "One or more fields failed validation.",
+                  "instance": "/api/v1/...",
+                  "request_id": "9f1b2c3d4e5f6a7b",
+                  "errors": [
+                    {
+                      "field": "username",
+                      "message": "String should have at least 1 character"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated \u2014 missing or expired session cookie.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "example": {
+                  "type": "https://api.example.com/problems/unauthenticated",
+                  "title": "Unauthenticated",
+                  "status": 401,
+                  "detail": "Authentication required.",
+                  "instance": "/api/v1/...",
+                  "request_id": "9f1b2c3d4e5f6a7b"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden \u2014 insufficient role or CSRF token validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "example": {
+                  "type": "https://api.example.com/problems/forbidden",
+                  "title": "Forbidden",
+                  "status": 403,
+                  "detail": "You do not have permission to perform this action.",
+                  "instance": "/api/v1/...",
+                  "request_id": "9f1b2c3d4e5f6a7b"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "example": {
+                  "type": "https://api.example.com/problems/not-found",
+                  "title": "Not Found",
+                  "status": 404,
+                  "detail": "The requested resource was not found.",
+                  "instance": "/api/v1/...",
+                  "request_id": "9f1b2c3d4e5f6a7b"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The session has already been submitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "example": {
+                  "type": "https://api.example.com/problems/conflict",
+                  "title": "Conflict",
+                  "status": 409,
+                  "detail": "The resource was modified by another request.",
+                  "instance": "/api/v1/...",
+                  "request_id": "9f1b2c3d4e5f6a7b"
                 }
               }
             }
@@ -421,7 +1086,13 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "sessionCookie": [],
+            "csrfToken": []
+          }
+        ]
       }
     },
     "/api/v1/examinee/sessions/{session_id}/review": {
@@ -429,7 +1100,8 @@
         "tags": [
           "examinee"
         ],
-        "summary": "Get Review",
+        "summary": "Review submitted answers",
+        "description": "Return the post-submission review for a completed session.\n\nOnly available after the session has been submitted. Each item includes\nthe examinee's selected option, the correct option, and correctness.",
         "operationId": "get_review_api_v1_examinee_sessions__session_id__review_get",
         "parameters": [
           {
@@ -445,11 +1117,65 @@
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Per-question review including correct answers.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SuccessResponse_ReviewResult_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated \u2014 missing or expired session cookie.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "example": {
+                  "type": "https://api.example.com/problems/unauthenticated",
+                  "title": "Unauthenticated",
+                  "status": 401,
+                  "detail": "Authentication required.",
+                  "instance": "/api/v1/...",
+                  "request_id": "9f1b2c3d4e5f6a7b"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden \u2014 insufficient role or CSRF token validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "example": {
+                  "type": "https://api.example.com/problems/forbidden",
+                  "title": "Forbidden",
+                  "status": 403,
+                  "detail": "You do not have permission to perform this action.",
+                  "instance": "/api/v1/...",
+                  "request_id": "9f1b2c3d4e5f6a7b"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Session not found, or it has not been submitted yet.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "example": {
+                  "type": "https://api.example.com/problems/not-found",
+                  "title": "Not Found",
+                  "status": 404,
+                  "detail": "The requested resource was not found.",
+                  "instance": "/api/v1/...",
+                  "request_id": "9f1b2c3d4e5f6a7b"
                 }
               }
             }
@@ -464,7 +1190,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
       }
     },
     "/api/v1/examinee/me/data-export": {
@@ -472,18 +1203,71 @@
         "tags": [
           "examinee"
         ],
-        "summary": "Data Export",
+        "summary": "Export personal data (GDPR)",
+        "description": "Download all personal data held for the authenticated examinee.\n\nReturns a JSON file as an attachment (GDPR Art. 20 data portability).\nThis endpoint bypasses the standard `SuccessResponse` envelope.",
         "operationId": "data_export_api_v1_examinee_me_data_export_get",
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "JSON file download containing all personal data held for the examinee.",
+            "headers": {
+              "Content-Disposition": {
+                "description": "Attachment with a generated filename, e.g. attachment; filename=\"data-export.json\".",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "type": "object",
+                  "description": "Complete personal-data export (profile, sessions, responses)."
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated \u2014 missing or expired session cookie.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "example": {
+                  "type": "https://api.example.com/problems/unauthenticated",
+                  "title": "Unauthenticated",
+                  "status": 401,
+                  "detail": "Authentication required.",
+                  "instance": "/api/v1/...",
+                  "request_id": "9f1b2c3d4e5f6a7b"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden \u2014 insufficient role or CSRF token validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "example": {
+                  "type": "https://api.example.com/problems/forbidden",
+                  "title": "Forbidden",
+                  "status": 403,
+                  "detail": "You do not have permission to perform this action.",
+                  "instance": "/api/v1/...",
+                  "request_id": "9f1b2c3d4e5f6a7b"
+                }
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
       }
     },
     "/api/v1/examiner/questions": {
@@ -491,7 +1275,8 @@
         "tags": [
           "examiner-questions"
         ],
-        "summary": "List Questions",
+        "summary": "List questions",
+        "description": "List question bank entries with cursor-based pagination.\n\nIncludes the correct answer for each question (examiner view) and the\ncurrent `active_count` of non-deleted questions.",
         "operationId": "list_questions_api_v1_examiner_questions_get",
         "parameters": [
           {
@@ -502,9 +1287,11 @@
               "type": "integer",
               "maximum": 100,
               "minimum": 1,
+              "description": "Page size (1-100).",
               "default": 50,
               "title": "Limit"
-            }
+            },
+            "description": "Page size (1-100)."
           },
           {
             "name": "cursor",
@@ -520,8 +1307,10 @@
                   "type": "null"
                 }
               ],
+              "description": "Cursor for pagination \u2014 pass the `next_cursor` from the previous page.",
               "title": "Cursor"
-            }
+            },
+            "description": "Cursor for pagination \u2014 pass the `next_cursor` from the previous page."
           },
           {
             "name": "include_deleted",
@@ -529,18 +1318,80 @@
             "required": false,
             "schema": {
               "type": "boolean",
+              "description": "Include soft-deleted questions in the listing.",
               "default": false,
               "title": "Include Deleted"
-            }
+            },
+            "description": "Include soft-deleted questions in the listing."
           }
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "A page of questions plus the total active question count.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SuccessResponse_QuestionListData_"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error \u2014 one or more request fields are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "example": {
+                  "type": "https://api.example.com/problems/validation-error",
+                  "title": "Validation Error",
+                  "status": 400,
+                  "detail": "One or more fields failed validation.",
+                  "instance": "/api/v1/...",
+                  "request_id": "9f1b2c3d4e5f6a7b",
+                  "errors": [
+                    {
+                      "field": "username",
+                      "message": "String should have at least 1 character"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated \u2014 missing or expired session cookie.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "example": {
+                  "type": "https://api.example.com/problems/unauthenticated",
+                  "title": "Unauthenticated",
+                  "status": 401,
+                  "detail": "Authentication required.",
+                  "instance": "/api/v1/...",
+                  "request_id": "9f1b2c3d4e5f6a7b"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden \u2014 insufficient role or CSRF token validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "example": {
+                  "type": "https://api.example.com/problems/forbidden",
+                  "title": "Forbidden",
+                  "status": 403,
+                  "detail": "You do not have permission to perform this action.",
+                  "instance": "/api/v1/...",
+                  "request_id": "9f1b2c3d4e5f6a7b"
                 }
               }
             }
@@ -555,14 +1406,38 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
       },
       "post": {
         "tags": [
           "examiner-questions"
         ],
-        "summary": "Create Question",
+        "summary": "Create a question",
+        "description": "Add a multiple-choice question (four options, one correct) to the bank.\n\nRequires an examiner session and the `X-CSRF-Token` header.",
         "operationId": "create_question_api_v1_examiner_questions_post",
+        "parameters": [
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Csrf-Token"
+            }
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -575,11 +1450,71 @@
         },
         "responses": {
           "201": {
-            "description": "Successful Response",
+            "description": "The newly created question.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SuccessResponse_QuestionOut_"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error \u2014 one or more request fields are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "example": {
+                  "type": "https://api.example.com/problems/validation-error",
+                  "title": "Validation Error",
+                  "status": 400,
+                  "detail": "One or more fields failed validation.",
+                  "instance": "/api/v1/...",
+                  "request_id": "9f1b2c3d4e5f6a7b",
+                  "errors": [
+                    {
+                      "field": "username",
+                      "message": "String should have at least 1 character"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated \u2014 missing or expired session cookie.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "example": {
+                  "type": "https://api.example.com/problems/unauthenticated",
+                  "title": "Unauthenticated",
+                  "status": 401,
+                  "detail": "Authentication required.",
+                  "instance": "/api/v1/...",
+                  "request_id": "9f1b2c3d4e5f6a7b"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden \u2014 insufficient role or CSRF token validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "example": {
+                  "type": "https://api.example.com/problems/forbidden",
+                  "title": "Forbidden",
+                  "status": 403,
+                  "detail": "You do not have permission to perform this action.",
+                  "instance": "/api/v1/...",
+                  "request_id": "9f1b2c3d4e5f6a7b"
                 }
               }
             }
@@ -594,7 +1529,13 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "sessionCookie": [],
+            "csrfToken": []
+          }
+        ]
       }
     },
     "/api/v1/examiner/questions/{question_id}": {
@@ -602,7 +1543,8 @@
         "tags": [
           "examiner-questions"
         ],
-        "summary": "Patch Question",
+        "summary": "Update a question",
+        "description": "Partially update a question; omitted fields keep their current values.\n\nEach edit creates a new question version so in-flight test sessions keep\nreferencing the version they were served. Requires an examiner session\nand the `X-CSRF-Token` header.",
         "operationId": "patch_question_api_v1_examiner_questions__question_id__patch",
         "parameters": [
           {
@@ -613,6 +1555,22 @@
               "type": "string",
               "format": "uuid",
               "title": "Question Id"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Csrf-Token"
             }
           }
         ],
@@ -628,11 +1586,89 @@
         },
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "The updated question with an incremented version.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SuccessResponse_QuestionOut_"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error \u2014 one or more request fields are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "example": {
+                  "type": "https://api.example.com/problems/validation-error",
+                  "title": "Validation Error",
+                  "status": 400,
+                  "detail": "One or more fields failed validation.",
+                  "instance": "/api/v1/...",
+                  "request_id": "9f1b2c3d4e5f6a7b",
+                  "errors": [
+                    {
+                      "field": "username",
+                      "message": "String should have at least 1 character"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated \u2014 missing or expired session cookie.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "example": {
+                  "type": "https://api.example.com/problems/unauthenticated",
+                  "title": "Unauthenticated",
+                  "status": 401,
+                  "detail": "Authentication required.",
+                  "instance": "/api/v1/...",
+                  "request_id": "9f1b2c3d4e5f6a7b"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden \u2014 insufficient role or CSRF token validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "example": {
+                  "type": "https://api.example.com/problems/forbidden",
+                  "title": "Forbidden",
+                  "status": 403,
+                  "detail": "You do not have permission to perform this action.",
+                  "instance": "/api/v1/...",
+                  "request_id": "9f1b2c3d4e5f6a7b"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "example": {
+                  "type": "https://api.example.com/problems/not-found",
+                  "title": "Not Found",
+                  "status": 404,
+                  "detail": "The requested resource was not found.",
+                  "instance": "/api/v1/...",
+                  "request_id": "9f1b2c3d4e5f6a7b"
                 }
               }
             }
@@ -647,13 +1683,20 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "sessionCookie": [],
+            "csrfToken": []
+          }
+        ]
       },
       "delete": {
         "tags": [
           "examiner-questions"
         ],
-        "summary": "Delete Question",
+        "summary": "Soft-delete a question",
+        "description": "Soft-delete a question (it is excluded from new tests but retained for history).\n\nRejected with 409 if it would drop the active bank below the minimum\nrequired for test generation. Requires an examiner session and the\n`X-CSRF-Token` header.",
         "operationId": "delete_question_api_v1_examiner_questions__question_id__delete",
         "parameters": [
           {
@@ -665,11 +1708,99 @@
               "format": "uuid",
               "title": "Question Id"
             }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Csrf-Token"
+            }
           }
         ],
         "responses": {
           "204": {
-            "description": "Successful Response"
+            "description": "Question soft-deleted."
+          },
+          "401": {
+            "description": "Unauthenticated \u2014 missing or expired session cookie.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "example": {
+                  "type": "https://api.example.com/problems/unauthenticated",
+                  "title": "Unauthenticated",
+                  "status": 401,
+                  "detail": "Authentication required.",
+                  "instance": "/api/v1/...",
+                  "request_id": "9f1b2c3d4e5f6a7b"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden \u2014 insufficient role or CSRF token validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "example": {
+                  "type": "https://api.example.com/problems/forbidden",
+                  "title": "Forbidden",
+                  "status": 403,
+                  "detail": "You do not have permission to perform this action.",
+                  "instance": "/api/v1/...",
+                  "request_id": "9f1b2c3d4e5f6a7b"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "example": {
+                  "type": "https://api.example.com/problems/not-found",
+                  "title": "Not Found",
+                  "status": 404,
+                  "detail": "The requested resource was not found.",
+                  "instance": "/api/v1/...",
+                  "request_id": "9f1b2c3d4e5f6a7b"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Deletion would reduce the active question bank below the required minimum (default 50).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "example": {
+                  "type": "https://api.example.com/problems/conflict",
+                  "title": "Conflict",
+                  "status": 409,
+                  "detail": "The resource was modified by another request.",
+                  "instance": "/api/v1/...",
+                  "request_id": "9f1b2c3d4e5f6a7b"
+                }
+              }
+            }
           },
           "422": {
             "description": "Validation Error",
@@ -681,7 +1812,13 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "sessionCookie": [],
+            "csrfToken": []
+          }
+        ]
       }
     },
     "/api/v1/examiner/sessions": {
@@ -689,7 +1826,8 @@
         "tags": [
           "examiner-sessions"
         ],
-        "summary": "List Sessions",
+        "summary": "List test sessions",
+        "description": "List examinee test sessions (all statuses) with cursor-based pagination.\n\nEach summary includes the examinee's PRN and name, the session status,\nscore, and submission time.",
         "operationId": "list_sessions_api_v1_examiner_sessions_get",
         "parameters": [
           {
@@ -700,9 +1838,11 @@
               "type": "integer",
               "maximum": 100,
               "minimum": 1,
+              "description": "Page size (1-100).",
               "default": 50,
               "title": "Limit"
-            }
+            },
+            "description": "Page size (1-100)."
           },
           {
             "name": "cursor",
@@ -718,13 +1858,15 @@
                   "type": "null"
                 }
               ],
+              "description": "Cursor for pagination \u2014 pass the `next_cursor` from the previous page.",
               "title": "Cursor"
-            }
+            },
+            "description": "Cursor for pagination \u2014 pass the `next_cursor` from the previous page."
           }
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "A page of test session summaries.",
             "content": {
               "application/json": {
                 "schema": {
@@ -733,44 +1875,63 @@
               }
             }
           },
-          "422": {
-            "description": "Validation Error",
+          "400": {
+            "description": "Validation error \u2014 one or more request fields are invalid.",
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "example": {
+                  "type": "https://api.example.com/problems/validation-error",
+                  "title": "Validation Error",
+                  "status": 400,
+                  "detail": "One or more fields failed validation.",
+                  "instance": "/api/v1/...",
+                  "request_id": "9f1b2c3d4e5f6a7b",
+                  "errors": [
+                    {
+                      "field": "username",
+                      "message": "String should have at least 1 character"
+                    }
+                  ]
                 }
               }
             }
-          }
-        }
-      }
-    },
-    "/api/v1/examiner/sessions/export": {
-      "get": {
-        "tags": [
-          "examiner-sessions"
-        ],
-        "summary": "Export Sessions",
-        "operationId": "export_sessions_api_v1_examiner_sessions_export_get",
-        "parameters": [
-          {
-            "name": "anonymised",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "boolean",
-              "default": false,
-              "title": "Anonymised"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
+          },
+          "401": {
+            "description": "Unauthenticated \u2014 missing or expired session cookie.",
             "content": {
-              "application/json": {
-                "schema": {}
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "example": {
+                  "type": "https://api.example.com/problems/unauthenticated",
+                  "title": "Unauthenticated",
+                  "status": 401,
+                  "detail": "Authentication required.",
+                  "instance": "/api/v1/...",
+                  "request_id": "9f1b2c3d4e5f6a7b"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden \u2014 insufficient role or CSRF token validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "example": {
+                  "type": "https://api.example.com/problems/forbidden",
+                  "title": "Forbidden",
+                  "status": 403,
+                  "detail": "You do not have permission to perform this action.",
+                  "instance": "/api/v1/...",
+                  "request_id": "9f1b2c3d4e5f6a7b"
+                }
               }
             }
           },
@@ -784,7 +1945,111 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/v1/examiner/sessions/export": {
+      "get": {
+        "tags": [
+          "examiner-sessions"
+        ],
+        "summary": "Export sessions as CSV",
+        "description": "Download all test sessions as a CSV attachment.\n\nSet `anonymised=true` to exclude personal identifiers. This endpoint\nbypasses the standard `SuccessResponse` envelope.",
+        "operationId": "export_sessions_api_v1_examiner_sessions_export_get",
+        "parameters": [
+          {
+            "name": "anonymised",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "When true, personal identifiers (PRN, name) are omitted from the export.",
+              "default": false,
+              "title": "Anonymised"
+            },
+            "description": "When true, personal identifiers (PRN, name) are omitted from the export."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "CSV file download of all test sessions.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              },
+              "text/csv": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "session_id,prn,name,status,score,submitted_at\n..."
+              }
+            },
+            "headers": {
+              "Content-Disposition": {
+                "description": "attachment; filename=\"sessions-export.csv\"",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated \u2014 missing or expired session cookie.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "example": {
+                  "type": "https://api.example.com/problems/unauthenticated",
+                  "title": "Unauthenticated",
+                  "status": 401,
+                  "detail": "Authentication required.",
+                  "instance": "/api/v1/...",
+                  "request_id": "9f1b2c3d4e5f6a7b"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden \u2014 insufficient role or CSRF token validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "example": {
+                  "type": "https://api.example.com/problems/forbidden",
+                  "title": "Forbidden",
+                  "status": 403,
+                  "detail": "You do not have permission to perform this action.",
+                  "instance": "/api/v1/...",
+                  "request_id": "9f1b2c3d4e5f6a7b"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
       }
     },
     "/api/v1/examiner/sessions/{session_id}": {
@@ -792,7 +2057,8 @@
         "tags": [
           "examiner-sessions"
         ],
-        "summary": "Session Detail",
+        "summary": "Get session detail",
+        "description": "Return a single test session with its per-question responses.\n\nIncludes the examinee's identity, selection mode, score, and for each\nquestion the selected option, correct option, and correctness.",
         "operationId": "session_detail_api_v1_examiner_sessions__session_id__get",
         "parameters": [
           {
@@ -808,7 +2074,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Full session detail including per-question results.",
             "content": {
               "application/json": {
                 "schema": {
@@ -817,6 +2083,60 @@
               }
             }
           },
+          "401": {
+            "description": "Unauthenticated \u2014 missing or expired session cookie.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "example": {
+                  "type": "https://api.example.com/problems/unauthenticated",
+                  "title": "Unauthenticated",
+                  "status": 401,
+                  "detail": "Authentication required.",
+                  "instance": "/api/v1/...",
+                  "request_id": "9f1b2c3d4e5f6a7b"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden \u2014 insufficient role or CSRF token validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "example": {
+                  "type": "https://api.example.com/problems/forbidden",
+                  "title": "Forbidden",
+                  "status": 403,
+                  "detail": "You do not have permission to perform this action.",
+                  "instance": "/api/v1/...",
+                  "request_id": "9f1b2c3d4e5f6a7b"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "example": {
+                  "type": "https://api.example.com/problems/not-found",
+                  "title": "Not Found",
+                  "status": 404,
+                  "detail": "The requested resource was not found.",
+                  "instance": "/api/v1/...",
+                  "request_id": "9f1b2c3d4e5f6a7b"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -827,7 +2147,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
       }
     },
     "/api/v1/examiner/users/examiners": {
@@ -835,21 +2160,40 @@
         "tags": [
           "examiner-users"
         ],
-        "summary": "Create Examiner",
+        "summary": "Create an examiner account",
+        "description": "Create a new examiner account (admin only).\n\nThe password must satisfy the platform policy (minimum 12 characters).\nBy default the new examiner must change their password on first login.\nRequires an admin examiner session and the `X-CSRF-Token` header.",
         "operationId": "create_examiner_api_v1_examiner_users_examiners_post",
+        "parameters": [
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Csrf-Token"
+            }
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/CreateExaminerRequest"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "201": {
-            "description": "Successful Response",
+            "description": "The newly created examiner account.",
             "content": {
               "application/json": {
                 "schema": {
@@ -858,6 +2202,84 @@
               }
             }
           },
+          "400": {
+            "description": "Validation error \u2014 one or more request fields are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "example": {
+                  "type": "https://api.example.com/problems/validation-error",
+                  "title": "Validation Error",
+                  "status": 400,
+                  "detail": "One or more fields failed validation.",
+                  "instance": "/api/v1/...",
+                  "request_id": "9f1b2c3d4e5f6a7b",
+                  "errors": [
+                    {
+                      "field": "username",
+                      "message": "String should have at least 1 character"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated \u2014 missing or expired session cookie.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "example": {
+                  "type": "https://api.example.com/problems/unauthenticated",
+                  "title": "Unauthenticated",
+                  "status": 401,
+                  "detail": "Authentication required.",
+                  "instance": "/api/v1/...",
+                  "request_id": "9f1b2c3d4e5f6a7b"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden \u2014 insufficient role or CSRF token validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "example": {
+                  "type": "https://api.example.com/problems/forbidden",
+                  "title": "Forbidden",
+                  "status": 403,
+                  "detail": "You do not have permission to perform this action.",
+                  "instance": "/api/v1/...",
+                  "request_id": "9f1b2c3d4e5f6a7b"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "An examiner with this username already exists.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "example": {
+                  "type": "https://api.example.com/problems/conflict",
+                  "title": "Conflict",
+                  "status": 409,
+                  "detail": "The resource was modified by another request.",
+                  "instance": "/api/v1/...",
+                  "request_id": "9f1b2c3d4e5f6a7b"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -868,7 +2290,13 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "sessionCookie": [],
+            "csrfToken": []
+          }
+        ]
       }
     },
     "/api/v1/examiner/users/examinees/{user_id}/erase": {
@@ -876,7 +2304,8 @@
         "tags": [
           "examiner-users"
         ],
-        "summary": "Erase Examinee",
+        "summary": "Request GDPR erasure of an examinee",
+        "description": "Request asynchronous erasure of an examinee's personal data (GDPR Art. 17).\n\nReturns **202** with a `job_id`; the erasure is processed in the\nbackground. Requires an admin examiner session and the `X-CSRF-Token`\nheader.",
         "operationId": "erase_examinee_api_v1_examiner_users_examinees__user_id__erase_post",
         "parameters": [
           {
@@ -888,11 +2317,27 @@
               "format": "uuid",
               "title": "User Id"
             }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Csrf-Token"
+            }
           }
         ],
         "responses": {
           "202": {
-            "description": "Successful Response",
+            "description": "Erasure job accepted for asynchronous processing.",
             "content": {
               "application/json": {
                 "schema": {
@@ -901,6 +2346,60 @@
               }
             }
           },
+          "401": {
+            "description": "Unauthenticated \u2014 missing or expired session cookie.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "example": {
+                  "type": "https://api.example.com/problems/unauthenticated",
+                  "title": "Unauthenticated",
+                  "status": 401,
+                  "detail": "Authentication required.",
+                  "instance": "/api/v1/...",
+                  "request_id": "9f1b2c3d4e5f6a7b"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden \u2014 insufficient role or CSRF token validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "example": {
+                  "type": "https://api.example.com/problems/forbidden",
+                  "title": "Forbidden",
+                  "status": 403,
+                  "detail": "You do not have permission to perform this action.",
+                  "instance": "/api/v1/...",
+                  "request_id": "9f1b2c3d4e5f6a7b"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "example": {
+                  "type": "https://api.example.com/problems/not-found",
+                  "title": "Not Found",
+                  "status": 404,
+                  "detail": "The requested resource was not found.",
+                  "instance": "/api/v1/...",
+                  "request_id": "9f1b2c3d4e5f6a7b"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -911,7 +2410,13 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "sessionCookie": [],
+            "csrfToken": []
+          }
+        ]
       }
     },
     "/api/v1/examiner/settings": {
@@ -919,11 +2424,12 @@
         "tags": [
           "examiner-settings"
         ],
-        "summary": "Get Settings",
+        "summary": "Get platform settings",
+        "description": "Read the platform settings (retention, retake policy, question selection mode).\n\nAvailable to any authenticated examiner.",
         "operationId": "get_settings_api_v1_examiner_settings_get",
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "The current platform settings.",
             "content": {
               "application/json": {
                 "schema": {
@@ -931,32 +2437,152 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "Unauthenticated \u2014 missing or expired session cookie.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "example": {
+                  "type": "https://api.example.com/problems/unauthenticated",
+                  "title": "Unauthenticated",
+                  "status": 401,
+                  "detail": "Authentication required.",
+                  "instance": "/api/v1/...",
+                  "request_id": "9f1b2c3d4e5f6a7b"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden \u2014 insufficient role or CSRF token validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "example": {
+                  "type": "https://api.example.com/problems/forbidden",
+                  "title": "Forbidden",
+                  "status": 403,
+                  "detail": "You do not have permission to perform this action.",
+                  "instance": "/api/v1/...",
+                  "request_id": "9f1b2c3d4e5f6a7b"
+                }
+              }
+            }
           }
-        }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
       },
       "patch": {
         "tags": [
           "examiner-settings"
         ],
-        "summary": "Patch Settings",
+        "summary": "Update platform settings",
+        "description": "Partially update platform settings; omitted fields are left unchanged.\n\nRequires an admin examiner session and the `X-CSRF-Token` header.",
         "operationId": "patch_settings_api_v1_examiner_settings_patch",
+        "parameters": [
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Csrf-Token"
+            }
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/PlatformSettingsPatchRequest"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "The settings after applying the update.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SuccessResponse_PlatformSettingsOut_"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error \u2014 one or more request fields are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "example": {
+                  "type": "https://api.example.com/problems/validation-error",
+                  "title": "Validation Error",
+                  "status": 400,
+                  "detail": "One or more fields failed validation.",
+                  "instance": "/api/v1/...",
+                  "request_id": "9f1b2c3d4e5f6a7b",
+                  "errors": [
+                    {
+                      "field": "username",
+                      "message": "String should have at least 1 character"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated \u2014 missing or expired session cookie.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "example": {
+                  "type": "https://api.example.com/problems/unauthenticated",
+                  "title": "Unauthenticated",
+                  "status": 401,
+                  "detail": "Authentication required.",
+                  "instance": "/api/v1/...",
+                  "request_id": "9f1b2c3d4e5f6a7b"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden \u2014 insufficient role or CSRF token validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                "example": {
+                  "type": "https://api.example.com/problems/forbidden",
+                  "title": "Forbidden",
+                  "status": 403,
+                  "detail": "You do not have permission to perform this action.",
+                  "instance": "/api/v1/...",
+                  "request_id": "9f1b2c3d4e5f6a7b"
                 }
               }
             }
@@ -971,7 +2597,13 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "sessionCookie": [],
+            "csrfToken": []
+          }
+        ]
       }
     }
   },
@@ -993,17 +2625,23 @@
             "type": "string",
             "maxLength": 255,
             "minLength": 1,
-            "title": "Username"
+            "title": "Username",
+            "description": "Username for the new examiner (whitespace trimmed).",
+            "examples": [
+              "examiner2"
+            ]
           },
           "password": {
             "type": "string",
             "maxLength": 128,
             "minLength": 12,
-            "title": "Password"
+            "title": "Password",
+            "description": "Initial password; must satisfy the platform password policy (minimum 12 characters)."
           },
           "force_password_change": {
             "type": "boolean",
             "title": "Force Password Change",
+            "description": "When true, the examiner must change the password on first login.",
             "default": true
           }
         },
@@ -1012,30 +2650,43 @@
           "username",
           "password"
         ],
-        "title": "CreateExaminerRequest"
+        "title": "CreateExaminerRequest",
+        "description": "Payload to create a new examiner account (admin only)."
       },
       "CsrfTokenResponse": {
         "properties": {
           "csrf_token": {
             "type": "string",
-            "title": "Csrf Token"
+            "title": "Csrf Token",
+            "description": "Opaque CSRF token.",
+            "examples": [
+              "q1w2e3r4t5y6u7i8o9p0"
+            ]
           }
         },
         "type": "object",
         "required": [
           "csrf_token"
         ],
-        "title": "CsrfTokenResponse"
+        "title": "CsrfTokenResponse",
+        "description": "A CSRF token to send in the X-CSRF-Token header on mutating requests."
       },
       "CurrentUserResponse": {
         "properties": {
           "user_id": {
             "type": "string",
             "format": "uuid",
-            "title": "User Id"
+            "title": "User Id",
+            "description": "Unique identifier of the user."
           },
           "role": {
-            "$ref": "#/components/schemas/UserRole"
+            "$ref": "#/components/schemas/UserRole",
+            "description": "Role of the authenticated user."
+          },
+          "csrf_token": {
+            "type": "string",
+            "title": "Csrf Token",
+            "description": "Session-bound CSRF token to send in the X-CSRF-Token header on mutating requests."
           },
           "prn": {
             "anyOf": [
@@ -1046,7 +2697,11 @@
                 "type": "null"
               }
             ],
-            "title": "Prn"
+            "title": "Prn",
+            "description": "Registration number (examinees only).",
+            "examples": [
+              "PRN2026001"
+            ]
           },
           "name": {
             "anyOf": [
@@ -1057,7 +2712,11 @@
                 "type": "null"
               }
             ],
-            "title": "Name"
+            "title": "Name",
+            "description": "Full name (examinees only).",
+            "examples": [
+              "Jane Doe"
+            ]
           },
           "username": {
             "anyOf": [
@@ -1068,34 +2727,59 @@
                 "type": "null"
               }
             ],
-            "title": "Username"
+            "title": "Username",
+            "description": "Username (examiners only).",
+            "examples": [
+              "examiner1"
+            ]
+          },
+          "is_admin": {
+            "type": "boolean",
+            "title": "Is Admin",
+            "description": "True when the examiner has administrative privileges.",
+            "default": false
           }
         },
         "type": "object",
         "required": [
           "user_id",
-          "role"
+          "role",
+          "csrf_token"
         ],
-        "title": "CurrentUserResponse"
+        "title": "CurrentUserResponse",
+        "description": "Profile of the authenticated user; role-specific fields may be null."
       },
       "EraseExamineeResponse": {
         "properties": {
           "user_id": {
             "type": "string",
             "format": "uuid",
-            "title": "User Id"
+            "title": "User Id",
+            "description": "The examinee whose data will be erased."
+          },
+          "job_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Job Id",
+            "description": "Identifier of the asynchronous erasure job."
           },
           "status": {
             "type": "string",
             "title": "Status",
-            "default": "accepted"
+            "description": "Job status at acceptance time.",
+            "default": "accepted",
+            "examples": [
+              "accepted"
+            ]
           }
         },
         "type": "object",
         "required": [
-          "user_id"
+          "user_id",
+          "job_id"
         ],
-        "title": "EraseExamineeResponse"
+        "title": "EraseExamineeResponse",
+        "description": "Acknowledgement of an accepted GDPR erasure request."
       },
       "ExamineeEntryRequest": {
         "properties": {
@@ -1103,17 +2787,29 @@
             "type": "string",
             "maxLength": 20,
             "minLength": 1,
-            "title": "Prn"
+            "title": "Prn",
+            "description": "Permanent registration number (normalised to uppercase).",
+            "examples": [
+              "PRN2026001"
+            ]
           },
           "name": {
             "type": "string",
             "maxLength": 100,
             "minLength": 1,
-            "title": "Name"
+            "title": "Name",
+            "description": "Examinee's full name as registered (whitespace trimmed).",
+            "examples": [
+              "Jane Doe"
+            ]
           },
           "privacy_acknowledged": {
             "type": "boolean",
-            "title": "Privacy Acknowledged"
+            "title": "Privacy Acknowledged",
+            "description": "Must be true; confirms the examinee accepted the privacy notice.",
+            "examples": [
+              true
+            ]
           }
         },
         "type": "object",
@@ -1122,7 +2818,8 @@
           "name",
           "privacy_acknowledged"
         ],
-        "title": "ExamineeEntryRequest"
+        "title": "ExamineeEntryRequest",
+        "description": "Examinee identification for registration or session resumption."
       },
       "ExamineeQuestionAtPositionResource": {
         "properties": {
@@ -1130,15 +2827,18 @@
             "type": "integer",
             "maximum": 50.0,
             "minimum": 1.0,
-            "title": "Position"
+            "title": "Position",
+            "description": "Position (1-based) of this question."
           },
           "total": {
             "type": "integer",
             "title": "Total",
+            "description": "Total number of questions in the test.",
             "default": 50
           },
           "question": {
-            "$ref": "#/components/schemas/SessionQuestionPayload"
+            "$ref": "#/components/schemas/SessionQuestionPayload",
+            "description": "The question and its options."
           },
           "selected_option": {
             "anyOf": [
@@ -1148,11 +2848,13 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "The examinee's previously selected option, if any."
           },
           "answered_count": {
             "type": "integer",
-            "title": "Answered Count"
+            "title": "Answered Count",
+            "description": "Number of questions answered so far."
           }
         },
         "type": "object",
@@ -1161,7 +2863,8 @@
           "question",
           "answered_count"
         ],
-        "title": "ExamineeQuestionAtPositionResource"
+        "title": "ExamineeQuestionAtPositionResource",
+        "description": "A question at a given position, with the examinee's current selection."
       },
       "ExaminerLoginRequest": {
         "properties": {
@@ -1169,13 +2872,21 @@
             "type": "string",
             "maxLength": 255,
             "minLength": 1,
-            "title": "Username"
+            "title": "Username",
+            "description": "Examiner username (leading/trailing whitespace is trimmed).",
+            "examples": [
+              "examiner1"
+            ]
           },
           "password": {
             "type": "string",
             "maxLength": 128,
             "minLength": 1,
-            "title": "Password"
+            "title": "Password",
+            "description": "Examiner password.",
+            "examples": [
+              "correct horse battery staple"
+            ]
           }
         },
         "type": "object",
@@ -1183,22 +2894,29 @@
           "username",
           "password"
         ],
-        "title": "ExaminerLoginRequest"
+        "title": "ExaminerLoginRequest",
+        "description": "Credentials for examiner login."
       },
       "ExaminerLoginResponse": {
         "properties": {
           "user_id": {
             "type": "string",
             "format": "uuid",
-            "title": "User Id"
+            "title": "User Id",
+            "description": "Unique identifier of the examiner."
           },
           "username": {
             "type": "string",
-            "title": "Username"
+            "title": "Username",
+            "description": "Examiner username.",
+            "examples": [
+              "examiner1"
+            ]
           },
           "must_change_password": {
             "type": "boolean",
             "title": "Must Change Password",
+            "description": "True when the examiner must change their password before continuing.",
             "default": false
           }
         },
@@ -1207,31 +2925,40 @@
           "user_id",
           "username"
         ],
-        "title": "ExaminerLoginResponse"
+        "title": "ExaminerLoginResponse",
+        "description": "Examiner profile returned after a successful login."
       },
       "ExaminerUserOut": {
         "properties": {
           "user_id": {
             "type": "string",
             "format": "uuid",
-            "title": "User Id"
+            "title": "User Id",
+            "description": "Unique identifier of the examiner."
           },
           "username": {
             "type": "string",
-            "title": "Username"
+            "title": "Username",
+            "description": "Examiner username.",
+            "examples": [
+              "examiner2"
+            ]
           },
           "is_active": {
             "type": "boolean",
-            "title": "Is Active"
+            "title": "Is Active",
+            "description": "Whether the account is active."
           },
           "force_password_change": {
             "type": "boolean",
-            "title": "Force Password Change"
+            "title": "Force Password Change",
+            "description": "Whether the examiner must change their password on first login."
           },
           "created_at": {
             "type": "string",
             "format": "date-time",
-            "title": "Created At"
+            "title": "Created At",
+            "description": "When the account was created (UTC)."
           }
         },
         "type": "object",
@@ -1242,7 +2969,8 @@
           "force_password_change",
           "created_at"
         ],
-        "title": "ExaminerUserOut"
+        "title": "ExaminerUserOut",
+        "description": "A created examiner account."
       },
       "HTTPValidationError": {
         "properties": {
@@ -1263,14 +2991,20 @@
             "type": "integer",
             "maximum": 3650.0,
             "minimum": 1.0,
-            "title": "Retention Days Completed"
+            "title": "Retention Days Completed",
+            "description": "Days completed sessions are retained before automatic deletion.",
+            "examples": [
+              365
+            ]
           },
           "allow_examinee_retake": {
             "type": "boolean",
-            "title": "Allow Examinee Retake"
+            "title": "Allow Examinee Retake",
+            "description": "Whether examinees who completed the test may take it again."
           },
           "question_selection_mode": {
-            "$ref": "#/components/schemas/SelectionMode"
+            "$ref": "#/components/schemas/SelectionMode",
+            "description": "How questions are selected when a new test session starts."
           }
         },
         "type": "object",
@@ -1279,7 +3013,8 @@
           "allow_examinee_retake",
           "question_selection_mode"
         ],
-        "title": "PlatformSettingsOut"
+        "title": "PlatformSettingsOut",
+        "description": "Current platform settings."
       },
       "PlatformSettingsPatchRequest": {
         "properties": {
@@ -1294,7 +3029,8 @@
                 "type": "null"
               }
             ],
-            "title": "Retention Days Completed"
+            "title": "Retention Days Completed",
+            "description": "New retention period in days (1-3650)."
           },
           "allow_examinee_retake": {
             "anyOf": [
@@ -1305,7 +3041,8 @@
                 "type": "null"
               }
             ],
-            "title": "Allow Examinee Retake"
+            "title": "Allow Examinee Retake",
+            "description": "New retake policy."
           },
           "question_selection_mode": {
             "anyOf": [
@@ -1315,11 +3052,13 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "New question selection mode."
           }
         },
         "type": "object",
-        "title": "PlatformSettingsPatchRequest"
+        "title": "PlatformSettingsPatchRequest",
+        "description": "Partial settings update; omitted fields are left unchanged."
       },
       "QuestionCreateRequest": {
         "properties": {
@@ -1327,34 +3066,58 @@
             "type": "string",
             "maxLength": 2000,
             "minLength": 1,
-            "title": "Question Text"
+            "title": "Question Text",
+            "description": "The question text.",
+            "examples": [
+              "What is the capital of France?"
+            ]
           },
           "option_a": {
             "type": "string",
             "maxLength": 500,
             "minLength": 1,
-            "title": "Option A"
+            "title": "Option A",
+            "description": "Text of option A.",
+            "examples": [
+              "Paris"
+            ]
           },
           "option_b": {
             "type": "string",
             "maxLength": 500,
             "minLength": 1,
-            "title": "Option B"
+            "title": "Option B",
+            "description": "Text of option B.",
+            "examples": [
+              "London"
+            ]
           },
           "option_c": {
             "type": "string",
             "maxLength": 500,
             "minLength": 1,
-            "title": "Option C"
+            "title": "Option C",
+            "description": "Text of option C.",
+            "examples": [
+              "Berlin"
+            ]
           },
           "option_d": {
             "type": "string",
             "maxLength": 500,
             "minLength": 1,
-            "title": "Option D"
+            "title": "Option D",
+            "description": "Text of option D.",
+            "examples": [
+              "Madrid"
+            ]
           },
           "correct_option": {
-            "$ref": "#/components/schemas/CorrectOption"
+            "$ref": "#/components/schemas/CorrectOption",
+            "description": "Key of the correct option (A-D).",
+            "examples": [
+              "A"
+            ]
           }
         },
         "type": "object",
@@ -1366,7 +3129,8 @@
           "option_d",
           "correct_option"
         ],
-        "title": "QuestionCreateRequest"
+        "title": "QuestionCreateRequest",
+        "description": "Payload to add a new question to the bank."
       },
       "QuestionListData": {
         "properties": {
@@ -1375,7 +3139,8 @@
               "$ref": "#/components/schemas/QuestionOut"
             },
             "type": "array",
-            "title": "Items"
+            "title": "Items",
+            "description": "Questions in this page."
           },
           "next_cursor": {
             "anyOf": [
@@ -1387,11 +3152,16 @@
                 "type": "null"
               }
             ],
-            "title": "Next Cursor"
+            "title": "Next Cursor",
+            "description": "Cursor for the next page; null when there are no more results."
           },
           "active_count": {
             "type": "integer",
-            "title": "Active Count"
+            "title": "Active Count",
+            "description": "Total number of active (non-deleted) questions in the bank.",
+            "examples": [
+              120
+            ]
           }
         },
         "type": "object",
@@ -1400,16 +3170,22 @@
           "next_cursor",
           "active_count"
         ],
-        "title": "QuestionListData"
+        "title": "QuestionListData",
+        "description": "One page of the question bank."
       },
       "QuestionOption": {
         "properties": {
           "key": {
-            "$ref": "#/components/schemas/CorrectOption"
+            "$ref": "#/components/schemas/CorrectOption",
+            "description": "Option key (A, B, C, or D)."
           },
           "text": {
             "type": "string",
-            "title": "Text"
+            "title": "Text",
+            "description": "Option text.",
+            "examples": [
+              "Paris"
+            ]
           }
         },
         "type": "object",
@@ -1417,7 +3193,8 @@
           "key",
           "text"
         ],
-        "title": "QuestionOption"
+        "title": "QuestionOption",
+        "description": "One of the four answer options for a question."
       },
       "QuestionOut": {
         "properties": {
@@ -1425,52 +3202,83 @@
             "type": "string",
             "maxLength": 2000,
             "minLength": 1,
-            "title": "Question Text"
+            "title": "Question Text",
+            "description": "The question text.",
+            "examples": [
+              "What is the capital of France?"
+            ]
           },
           "option_a": {
             "type": "string",
             "maxLength": 500,
             "minLength": 1,
-            "title": "Option A"
+            "title": "Option A",
+            "description": "Text of option A.",
+            "examples": [
+              "Paris"
+            ]
           },
           "option_b": {
             "type": "string",
             "maxLength": 500,
             "minLength": 1,
-            "title": "Option B"
+            "title": "Option B",
+            "description": "Text of option B.",
+            "examples": [
+              "London"
+            ]
           },
           "option_c": {
             "type": "string",
             "maxLength": 500,
             "minLength": 1,
-            "title": "Option C"
+            "title": "Option C",
+            "description": "Text of option C.",
+            "examples": [
+              "Berlin"
+            ]
           },
           "option_d": {
             "type": "string",
             "maxLength": 500,
             "minLength": 1,
-            "title": "Option D"
+            "title": "Option D",
+            "description": "Text of option D.",
+            "examples": [
+              "Madrid"
+            ]
           },
           "correct_option": {
-            "$ref": "#/components/schemas/CorrectOption"
+            "$ref": "#/components/schemas/CorrectOption",
+            "description": "Key of the correct option (A-D).",
+            "examples": [
+              "A"
+            ]
           },
           "question_id": {
             "type": "string",
             "format": "uuid",
-            "title": "Question Id"
+            "title": "Question Id",
+            "description": "Unique identifier of the question."
           },
           "question_version": {
             "type": "integer",
-            "title": "Question Version"
+            "title": "Question Version",
+            "description": "Version number, incremented on every edit.",
+            "examples": [
+              1
+            ]
           },
           "is_deleted": {
             "type": "boolean",
-            "title": "Is Deleted"
+            "title": "Is Deleted",
+            "description": "True when the question has been soft-deleted."
           },
           "updated_at": {
             "type": "string",
             "format": "date-time",
-            "title": "Updated At"
+            "title": "Updated At",
+            "description": "When the question was last modified (UTC)."
           }
         },
         "type": "object",
@@ -1486,7 +3294,8 @@
           "is_deleted",
           "updated_at"
         ],
-        "title": "QuestionOut"
+        "title": "QuestionOut",
+        "description": "A question bank entry, including the correct answer."
       },
       "QuestionPatchRequest": {
         "properties": {
@@ -1501,7 +3310,8 @@
                 "type": "null"
               }
             ],
-            "title": "Question Text"
+            "title": "Question Text",
+            "description": "New question text."
           },
           "option_a": {
             "anyOf": [
@@ -1514,7 +3324,8 @@
                 "type": "null"
               }
             ],
-            "title": "Option A"
+            "title": "Option A",
+            "description": "New text for option A."
           },
           "option_b": {
             "anyOf": [
@@ -1527,7 +3338,8 @@
                 "type": "null"
               }
             ],
-            "title": "Option B"
+            "title": "Option B",
+            "description": "New text for option B."
           },
           "option_c": {
             "anyOf": [
@@ -1540,7 +3352,8 @@
                 "type": "null"
               }
             ],
-            "title": "Option C"
+            "title": "Option C",
+            "description": "New text for option C."
           },
           "option_d": {
             "anyOf": [
@@ -1553,7 +3366,8 @@
                 "type": "null"
               }
             ],
-            "title": "Option D"
+            "title": "Option D",
+            "description": "New text for option D."
           },
           "correct_option": {
             "anyOf": [
@@ -1563,24 +3377,31 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "New key of the correct option (A-D)."
           }
         },
         "type": "object",
-        "title": "QuestionPatchRequest"
+        "title": "QuestionPatchRequest",
+        "description": "Partial question update; omitted fields keep their current values."
       },
       "ResponseMeta": {
         "properties": {
           "request_id": {
             "type": "string",
-            "title": "Request Id"
+            "title": "Request Id",
+            "description": "Unique request identifier; matches the X-Request-Id response header.",
+            "examples": [
+              "9f1b2c3d4e5f6a7b"
+            ]
           }
         },
         "type": "object",
         "required": [
           "request_id"
         ],
-        "title": "ResponseMeta"
+        "title": "ResponseMeta",
+        "description": "Per-request metadata included in every success envelope."
       },
       "ReviewItem": {
         "properties": {
@@ -1588,18 +3409,21 @@
             "type": "integer",
             "maximum": 50.0,
             "minimum": 1.0,
-            "title": "Position"
+            "title": "Position",
+            "description": "Position (1-based) of the question."
           },
           "question_text": {
             "type": "string",
-            "title": "Question Text"
+            "title": "Question Text",
+            "description": "The question text."
           },
           "options": {
             "items": {
               "$ref": "#/components/schemas/QuestionOption"
             },
             "type": "array",
-            "title": "Options"
+            "title": "Options",
+            "description": "The four answer options (A-D)."
           },
           "selected_option": {
             "anyOf": [
@@ -1609,10 +3433,12 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "The examinee's selected option (null if unanswered)."
           },
           "correct_option": {
-            "$ref": "#/components/schemas/CorrectOption"
+            "$ref": "#/components/schemas/CorrectOption",
+            "description": "The correct option key."
           },
           "is_correct": {
             "anyOf": [
@@ -1623,7 +3449,8 @@
                 "type": "null"
               }
             ],
-            "title": "Is Correct"
+            "title": "Is Correct",
+            "description": "Whether the answer was correct (null if unanswered)."
           }
         },
         "type": "object",
@@ -1633,7 +3460,8 @@
           "options",
           "correct_option"
         ],
-        "title": "ReviewItem"
+        "title": "ReviewItem",
+        "description": "Per-question review entry, available after submission."
       },
       "ReviewResult": {
         "properties": {
@@ -1642,14 +3470,16 @@
               "$ref": "#/components/schemas/ReviewItem"
             },
             "type": "array",
-            "title": "Items"
+            "title": "Items",
+            "description": "Review entries in question order."
           }
         },
         "type": "object",
         "required": [
           "items"
         ],
-        "title": "ReviewResult"
+        "title": "ReviewResult",
+        "description": "Full post-submission review of all questions."
       },
       "SaveResponseRequest": {
         "properties": {
@@ -1661,18 +3491,24 @@
               {
                 "type": "null"
               }
+            ],
+            "description": "Selected option key (A-D), or null to clear the answer.",
+            "examples": [
+              "B"
             ]
           }
         },
         "type": "object",
-        "title": "SaveResponseRequest"
+        "title": "SaveResponseRequest",
+        "description": "Answer selection for a question; null clears the answer."
       },
       "SaveResponseResult": {
         "properties": {
           "question_id": {
             "type": "string",
             "format": "uuid",
-            "title": "Question Id"
+            "title": "Question Id",
+            "description": "The question the response belongs to."
           },
           "selected_option": {
             "anyOf": [
@@ -1682,16 +3518,19 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "The stored option after the save (null when cleared)."
           },
           "updated_at": {
             "type": "string",
             "format": "date-time",
-            "title": "Updated At"
+            "title": "Updated At",
+            "description": "Server timestamp of the save; usable in subsequent If-Unmodified-Since headers."
           },
           "answered_count": {
             "type": "integer",
-            "title": "Answered Count"
+            "title": "Answered Count",
+            "description": "Number of questions answered after this save."
           }
         },
         "type": "object",
@@ -1700,7 +3539,8 @@
           "updated_at",
           "answered_count"
         ],
-        "title": "SaveResponseResult"
+        "title": "SaveResponseResult",
+        "description": "Confirmation of a saved answer."
       },
       "SelectedOption": {
         "type": "string",
@@ -1725,10 +3565,18 @@
           "session_id": {
             "type": "string",
             "format": "uuid",
-            "title": "Session Id"
+            "title": "Session Id",
+            "description": "Unique identifier of the session."
+          },
+          "user_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "User Id",
+            "description": "Unique identifier of the examinee."
           },
           "status": {
-            "$ref": "#/components/schemas/SessionStatus"
+            "$ref": "#/components/schemas/SessionStatus",
+            "description": "Current session status."
           },
           "score": {
             "anyOf": [
@@ -1739,12 +3587,14 @@
                 "type": "null"
               }
             ],
-            "title": "Score"
+            "title": "Score",
+            "description": "Final score; null until submitted."
           },
           "started_at": {
             "type": "string",
             "format": "date-time",
-            "title": "Started At"
+            "title": "Started At",
+            "description": "When the session was started (UTC)."
           },
           "submitted_at": {
             "anyOf": [
@@ -1756,10 +3606,12 @@
                 "type": "null"
               }
             ],
-            "title": "Submitted At"
+            "title": "Submitted At",
+            "description": "Submission time (UTC); null until submitted."
           },
           "selection_mode": {
-            "$ref": "#/components/schemas/SelectionMode"
+            "$ref": "#/components/schemas/SelectionMode",
+            "description": "How questions were selected for this session."
           },
           "prn": {
             "anyOf": [
@@ -1770,7 +3622,8 @@
                 "type": "null"
               }
             ],
-            "title": "Prn"
+            "title": "Prn",
+            "description": "Examinee registration number."
           },
           "name": {
             "anyOf": [
@@ -1781,19 +3634,22 @@
                 "type": "null"
               }
             ],
-            "title": "Name"
+            "title": "Name",
+            "description": "Examinee full name."
           },
           "responses": {
             "items": {
               "$ref": "#/components/schemas/SessionQuestionResultOut"
             },
             "type": "array",
-            "title": "Responses"
+            "title": "Responses",
+            "description": "Per-question results in test order."
           }
         },
         "type": "object",
         "required": [
           "session_id",
+          "user_id",
           "status",
           "score",
           "started_at",
@@ -1803,7 +3659,8 @@
           "name",
           "responses"
         ],
-        "title": "SessionDetailOut"
+        "title": "SessionDetailOut",
+        "description": "Full detail of a test session including per-question results."
       },
       "SessionListData": {
         "properties": {
@@ -1812,7 +3669,8 @@
               "$ref": "#/components/schemas/SessionSummaryOut"
             },
             "type": "array",
-            "title": "Items"
+            "title": "Items",
+            "description": "Session summaries in this page."
           },
           "next_cursor": {
             "anyOf": [
@@ -1824,7 +3682,8 @@
                 "type": "null"
               }
             ],
-            "title": "Next Cursor"
+            "title": "Next Cursor",
+            "description": "Cursor for the next page; null when there are no more results."
           }
         },
         "type": "object",
@@ -1832,25 +3691,32 @@
           "items",
           "next_cursor"
         ],
-        "title": "SessionListData"
+        "title": "SessionListData",
+        "description": "One page of test session summaries."
       },
       "SessionQuestionPayload": {
         "properties": {
           "question_id": {
             "type": "string",
             "format": "uuid",
-            "title": "Question Id"
+            "title": "Question Id",
+            "description": "Unique identifier of the question."
           },
           "question_text": {
             "type": "string",
-            "title": "Question Text"
+            "title": "Question Text",
+            "description": "The question text.",
+            "examples": [
+              "What is the capital of France?"
+            ]
           },
           "options": {
             "items": {
               "$ref": "#/components/schemas/QuestionOption"
             },
             "type": "array",
-            "title": "Options"
+            "title": "Options",
+            "description": "The four answer options (A-D)."
           }
         },
         "type": "object",
@@ -1859,22 +3725,26 @@
           "question_text",
           "options"
         ],
-        "title": "SessionQuestionPayload"
+        "title": "SessionQuestionPayload",
+        "description": "A question as presented to the examinee (the correct answer is never included)."
       },
       "SessionQuestionResultOut": {
         "properties": {
           "question_id": {
             "type": "string",
             "format": "uuid",
-            "title": "Question Id"
+            "title": "Question Id",
+            "description": "Unique identifier of the question."
           },
           "position": {
             "type": "integer",
-            "title": "Position"
+            "title": "Position",
+            "description": "Position (1-based) of the question in the test."
           },
           "question_text": {
             "type": "string",
-            "title": "Question Text"
+            "title": "Question Text",
+            "description": "The question text."
           },
           "selected_option": {
             "anyOf": [
@@ -1884,10 +3754,12 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "The examinee's selected option (null if unanswered)."
           },
           "correct_option": {
-            "$ref": "#/components/schemas/CorrectOption"
+            "$ref": "#/components/schemas/CorrectOption",
+            "description": "The correct option key."
           },
           "is_correct": {
             "anyOf": [
@@ -1898,7 +3770,8 @@
                 "type": "null"
               }
             ],
-            "title": "Is Correct"
+            "title": "Is Correct",
+            "description": "Whether the answer was correct (null if unanswered)."
           }
         },
         "type": "object",
@@ -1910,7 +3783,8 @@
           "correct_option",
           "is_correct"
         ],
-        "title": "SessionQuestionResultOut"
+        "title": "SessionQuestionResultOut",
+        "description": "Per-question result within a session detail."
       },
       "SessionStatus": {
         "type": "string",
@@ -1926,10 +3800,12 @@
           "session_id": {
             "type": "string",
             "format": "uuid",
-            "title": "Session Id"
+            "title": "Session Id",
+            "description": "Unique identifier of the session."
           },
           "status": {
-            "$ref": "#/components/schemas/SessionStatus"
+            "$ref": "#/components/schemas/SessionStatus",
+            "description": "Current session status."
           },
           "score": {
             "anyOf": [
@@ -1940,7 +3816,11 @@
                 "type": "null"
               }
             ],
-            "title": "Score"
+            "title": "Score",
+            "description": "Final score; null until submitted.",
+            "examples": [
+              42
+            ]
           },
           "submitted_at": {
             "anyOf": [
@@ -1952,7 +3832,8 @@
                 "type": "null"
               }
             ],
-            "title": "Submitted At"
+            "title": "Submitted At",
+            "description": "Submission time (UTC); null until submitted."
           },
           "prn": {
             "anyOf": [
@@ -1963,7 +3844,11 @@
                 "type": "null"
               }
             ],
-            "title": "Prn"
+            "title": "Prn",
+            "description": "Examinee registration number.",
+            "examples": [
+              "PRN2026001"
+            ]
           },
           "name": {
             "anyOf": [
@@ -1974,7 +3859,11 @@
                 "type": "null"
               }
             ],
-            "title": "Name"
+            "title": "Name",
+            "description": "Examinee full name.",
+            "examples": [
+              "Jane Doe"
+            ]
           }
         },
         "type": "object",
@@ -1986,57 +3875,74 @@
           "prn",
           "name"
         ],
-        "title": "SessionSummaryOut"
+        "title": "SessionSummaryOut",
+        "description": "Summary row of an examinee test session."
       },
       "SubmitSessionRequest": {
         "properties": {
           "confirm": {
             "type": "boolean",
             "const": true,
-            "title": "Confirm"
+            "title": "Confirm",
+            "description": "Must be true; guards against accidental submission.",
+            "examples": [
+              true
+            ]
           }
         },
         "type": "object",
         "required": [
           "confirm"
         ],
-        "title": "SubmitSessionRequest"
+        "title": "SubmitSessionRequest",
+        "description": "Explicit confirmation required to submit the test."
       },
       "SubmitSessionResult": {
         "properties": {
           "session_id": {
             "type": "string",
             "format": "uuid",
-            "title": "Session Id"
+            "title": "Session Id",
+            "description": "Unique identifier of the submitted session."
           },
           "status": {
-            "$ref": "#/components/schemas/SessionStatus"
+            "$ref": "#/components/schemas/SessionStatus",
+            "description": "Session status after submission."
           },
           "score": {
             "type": "integer",
-            "title": "Score"
+            "title": "Score",
+            "description": "Number of correct answers.",
+            "examples": [
+              42
+            ]
           },
           "max_score": {
             "type": "integer",
             "title": "Max Score",
+            "description": "Maximum achievable score.",
             "default": 50
           },
           "correct_count": {
             "type": "integer",
-            "title": "Correct Count"
+            "title": "Correct Count",
+            "description": "Number of correctly answered questions."
           },
           "incorrect_count": {
             "type": "integer",
-            "title": "Incorrect Count"
+            "title": "Incorrect Count",
+            "description": "Number of incorrectly answered questions."
           },
           "unattempted_count": {
             "type": "integer",
-            "title": "Unattempted Count"
+            "title": "Unattempted Count",
+            "description": "Number of unanswered questions."
           },
           "submitted_at": {
             "type": "string",
             "format": "date-time",
-            "title": "Submitted At"
+            "title": "Submitted At",
+            "description": "When the session was submitted (UTC)."
           }
         },
         "type": "object",
@@ -2049,15 +3955,18 @@
           "unattempted_count",
           "submitted_at"
         ],
-        "title": "SubmitSessionResult"
+        "title": "SubmitSessionResult",
+        "description": "Final score breakdown after submission."
       },
       "SuccessResponse_CsrfTokenResponse_": {
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/CsrfTokenResponse"
+            "$ref": "#/components/schemas/CsrfTokenResponse",
+            "description": "The endpoint-specific response payload."
           },
           "meta": {
-            "$ref": "#/components/schemas/ResponseMeta"
+            "$ref": "#/components/schemas/ResponseMeta",
+            "description": "Request metadata for log correlation."
           }
         },
         "type": "object",
@@ -2070,10 +3979,12 @@
       "SuccessResponse_CurrentUserResponse_": {
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/CurrentUserResponse"
+            "$ref": "#/components/schemas/CurrentUserResponse",
+            "description": "The endpoint-specific response payload."
           },
           "meta": {
-            "$ref": "#/components/schemas/ResponseMeta"
+            "$ref": "#/components/schemas/ResponseMeta",
+            "description": "Request metadata for log correlation."
           }
         },
         "type": "object",
@@ -2086,10 +3997,12 @@
       "SuccessResponse_EraseExamineeResponse_": {
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/EraseExamineeResponse"
+            "$ref": "#/components/schemas/EraseExamineeResponse",
+            "description": "The endpoint-specific response payload."
           },
           "meta": {
-            "$ref": "#/components/schemas/ResponseMeta"
+            "$ref": "#/components/schemas/ResponseMeta",
+            "description": "Request metadata for log correlation."
           }
         },
         "type": "object",
@@ -2102,10 +4015,12 @@
       "SuccessResponse_ExamineeQuestionAtPositionResource_": {
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/ExamineeQuestionAtPositionResource"
+            "$ref": "#/components/schemas/ExamineeQuestionAtPositionResource",
+            "description": "The endpoint-specific response payload."
           },
           "meta": {
-            "$ref": "#/components/schemas/ResponseMeta"
+            "$ref": "#/components/schemas/ResponseMeta",
+            "description": "Request metadata for log correlation."
           }
         },
         "type": "object",
@@ -2118,10 +4033,12 @@
       "SuccessResponse_ExaminerLoginResponse_": {
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/ExaminerLoginResponse"
+            "$ref": "#/components/schemas/ExaminerLoginResponse",
+            "description": "The endpoint-specific response payload."
           },
           "meta": {
-            "$ref": "#/components/schemas/ResponseMeta"
+            "$ref": "#/components/schemas/ResponseMeta",
+            "description": "Request metadata for log correlation."
           }
         },
         "type": "object",
@@ -2134,10 +4051,12 @@
       "SuccessResponse_ExaminerUserOut_": {
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/ExaminerUserOut"
+            "$ref": "#/components/schemas/ExaminerUserOut",
+            "description": "The endpoint-specific response payload."
           },
           "meta": {
-            "$ref": "#/components/schemas/ResponseMeta"
+            "$ref": "#/components/schemas/ResponseMeta",
+            "description": "Request metadata for log correlation."
           }
         },
         "type": "object",
@@ -2150,10 +4069,12 @@
       "SuccessResponse_PlatformSettingsOut_": {
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/PlatformSettingsOut"
+            "$ref": "#/components/schemas/PlatformSettingsOut",
+            "description": "The endpoint-specific response payload."
           },
           "meta": {
-            "$ref": "#/components/schemas/ResponseMeta"
+            "$ref": "#/components/schemas/ResponseMeta",
+            "description": "Request metadata for log correlation."
           }
         },
         "type": "object",
@@ -2166,10 +4087,12 @@
       "SuccessResponse_QuestionListData_": {
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/QuestionListData"
+            "$ref": "#/components/schemas/QuestionListData",
+            "description": "The endpoint-specific response payload."
           },
           "meta": {
-            "$ref": "#/components/schemas/ResponseMeta"
+            "$ref": "#/components/schemas/ResponseMeta",
+            "description": "Request metadata for log correlation."
           }
         },
         "type": "object",
@@ -2182,10 +4105,12 @@
       "SuccessResponse_QuestionOut_": {
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/QuestionOut"
+            "$ref": "#/components/schemas/QuestionOut",
+            "description": "The endpoint-specific response payload."
           },
           "meta": {
-            "$ref": "#/components/schemas/ResponseMeta"
+            "$ref": "#/components/schemas/ResponseMeta",
+            "description": "Request metadata for log correlation."
           }
         },
         "type": "object",
@@ -2198,10 +4123,12 @@
       "SuccessResponse_ReviewResult_": {
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/ReviewResult"
+            "$ref": "#/components/schemas/ReviewResult",
+            "description": "The endpoint-specific response payload."
           },
           "meta": {
-            "$ref": "#/components/schemas/ResponseMeta"
+            "$ref": "#/components/schemas/ResponseMeta",
+            "description": "Request metadata for log correlation."
           }
         },
         "type": "object",
@@ -2214,10 +4141,12 @@
       "SuccessResponse_SaveResponseResult_": {
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/SaveResponseResult"
+            "$ref": "#/components/schemas/SaveResponseResult",
+            "description": "The endpoint-specific response payload."
           },
           "meta": {
-            "$ref": "#/components/schemas/ResponseMeta"
+            "$ref": "#/components/schemas/ResponseMeta",
+            "description": "Request metadata for log correlation."
           }
         },
         "type": "object",
@@ -2230,10 +4159,12 @@
       "SuccessResponse_SessionDetailOut_": {
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/SessionDetailOut"
+            "$ref": "#/components/schemas/SessionDetailOut",
+            "description": "The endpoint-specific response payload."
           },
           "meta": {
-            "$ref": "#/components/schemas/ResponseMeta"
+            "$ref": "#/components/schemas/ResponseMeta",
+            "description": "Request metadata for log correlation."
           }
         },
         "type": "object",
@@ -2246,10 +4177,12 @@
       "SuccessResponse_SessionListData_": {
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/SessionListData"
+            "$ref": "#/components/schemas/SessionListData",
+            "description": "The endpoint-specific response payload."
           },
           "meta": {
-            "$ref": "#/components/schemas/ResponseMeta"
+            "$ref": "#/components/schemas/ResponseMeta",
+            "description": "Request metadata for log correlation."
           }
         },
         "type": "object",
@@ -2262,10 +4195,12 @@
       "SuccessResponse_SubmitSessionResult_": {
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/SubmitSessionResult"
+            "$ref": "#/components/schemas/SubmitSessionResult",
+            "description": "The endpoint-specific response payload."
           },
           "meta": {
-            "$ref": "#/components/schemas/ResponseMeta"
+            "$ref": "#/components/schemas/ResponseMeta",
+            "description": "Request metadata for log correlation."
           }
         },
         "type": "object",
@@ -2321,34 +4256,41 @@
           "session_id": {
             "type": "string",
             "format": "uuid",
-            "title": "Session Id"
+            "title": "Session Id",
+            "description": "Unique identifier of the test session."
           },
           "status": {
-            "$ref": "#/components/schemas/SessionStatus"
+            "$ref": "#/components/schemas/SessionStatus",
+            "description": "Current session status."
           },
           "total_questions": {
             "type": "integer",
             "title": "Total Questions",
+            "description": "Number of questions in the test.",
             "default": 50
           },
           "answered_count": {
             "type": "integer",
-            "title": "Answered Count"
+            "title": "Answered Count",
+            "description": "Number of questions answered so far."
           },
           "current_position": {
             "type": "integer",
             "title": "Current Position",
+            "description": "Position (1-based) of the question the examinee is on.",
             "default": 1
           },
           "started_at": {
             "type": "string",
             "format": "date-time",
-            "title": "Started At"
+            "title": "Started At",
+            "description": "When the session was started (UTC)."
           },
           "expires_at": {
             "type": "string",
             "format": "date-time",
-            "title": "Expires At"
+            "title": "Expires At",
+            "description": "When the session expires (UTC)."
           }
         },
         "type": "object",
@@ -2359,15 +4301,18 @@
           "started_at",
           "expires_at"
         ],
-        "title": "ExamineeSessionResource"
+        "title": "ExamineeSessionResource",
+        "description": "Summary of an examinee's test session."
       },
       "app__schemas__common__SuccessResponse_ExamineeSessionResource___1": {
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/app__schemas__auth__ExamineeSessionResource"
+            "$ref": "#/components/schemas/app__schemas__auth__ExamineeSessionResource",
+            "description": "The endpoint-specific response payload."
           },
           "meta": {
-            "$ref": "#/components/schemas/ResponseMeta"
+            "$ref": "#/components/schemas/ResponseMeta",
+            "description": "Request metadata for log correlation."
           }
         },
         "type": "object",
@@ -2380,10 +4325,12 @@
       "app__schemas__common__SuccessResponse_ExamineeSessionResource___2": {
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/app__schemas__examinee__ExamineeSessionResource"
+            "$ref": "#/components/schemas/app__schemas__examinee__ExamineeSessionResource",
+            "description": "The endpoint-specific response payload."
           },
           "meta": {
-            "$ref": "#/components/schemas/ResponseMeta"
+            "$ref": "#/components/schemas/ResponseMeta",
+            "description": "Request metadata for log correlation."
           }
         },
         "type": "object",
@@ -2398,35 +4345,42 @@
           "session_id": {
             "type": "string",
             "format": "uuid",
-            "title": "Session Id"
+            "title": "Session Id",
+            "description": "Unique identifier of the test session."
           },
           "status": {
-            "$ref": "#/components/schemas/SessionStatus"
+            "$ref": "#/components/schemas/SessionStatus",
+            "description": "Current session status."
           },
           "total_questions": {
             "type": "integer",
             "title": "Total Questions",
+            "description": "Number of questions in the test.",
             "default": 50
           },
           "answered_count": {
             "type": "integer",
             "title": "Answered Count",
+            "description": "Number of questions answered so far.",
             "default": 0
           },
           "current_position": {
             "type": "integer",
             "title": "Current Position",
+            "description": "Position (1-based) of the question the examinee is on.",
             "default": 1
           },
           "started_at": {
             "type": "string",
             "format": "date-time",
-            "title": "Started At"
+            "title": "Started At",
+            "description": "When the session was started (UTC)."
           },
           "expires_at": {
             "type": "string",
             "format": "date-time",
-            "title": "Expires At"
+            "title": "Expires At",
+            "description": "When the session expires (UTC)."
           }
         },
         "type": "object",
@@ -2436,14 +4390,199 @@
           "started_at",
           "expires_at"
         ],
-        "title": "ExamineeSessionResource"
+        "title": "ExamineeSessionResource",
+        "description": "Summary of an examinee's test session."
+      },
+      "FieldError": {
+        "description": "A single field-level validation failure.",
+        "properties": {
+          "field": {
+            "description": "Dotted path of the invalid request field.",
+            "examples": [
+              "username"
+            ],
+            "title": "Field",
+            "type": "string"
+          },
+          "message": {
+            "description": "Human-readable description of the validation failure.",
+            "examples": [
+              "String should have at least 1 character"
+            ],
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "field",
+          "message"
+        ],
+        "title": "FieldError",
+        "type": "object"
+      },
+      "ProblemDetails": {
+        "description": "RFC 7807 problem details returned with content type application/problem+json.",
+        "properties": {
+          "type": {
+            "description": "URI identifying the problem type.",
+            "examples": [
+              "https://api.example.com/problems/unauthenticated"
+            ],
+            "title": "Type",
+            "type": "string"
+          },
+          "title": {
+            "description": "Short, human-readable summary of the problem type.",
+            "examples": [
+              "Unauthenticated"
+            ],
+            "title": "Title",
+            "type": "string"
+          },
+          "status": {
+            "description": "HTTP status code.",
+            "examples": [
+              401
+            ],
+            "title": "Status",
+            "type": "integer"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Human-readable explanation specific to this occurrence.",
+            "examples": [
+              "Authentication required."
+            ],
+            "title": "Detail"
+          },
+          "instance": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Request path on which the problem occurred.",
+            "examples": [
+              "/api/v1/auth/me"
+            ],
+            "title": "Instance"
+          },
+          "request_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Request identifier for log correlation; matches X-Request-Id.",
+            "examples": [
+              "9f1b2c3d4e5f6a7b"
+            ],
+            "title": "Request Id"
+          },
+          "errors": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldError"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Field-level validation errors (only on 400 validation failures).",
+            "title": "Errors"
+          },
+          "locked_until": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "When a locked account becomes available again (only on 423 responses).",
+            "title": "Locked Until"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "status"
+        ],
+        "title": "ProblemDetails",
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "sessionCookie": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "session_id",
+        "description": "Opaque server-side session token issued by the login/entry endpoints as an HttpOnly cookie. Examiner sessions last 1 hour, examinee sessions 4 hours by default."
+      },
+      "csrfToken": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-CSRF-Token",
+        "description": "Session-bound CSRF token required on mutating requests. Obtain it from GET /auth/me (or GET /auth/csrf before login)."
       }
     }
   },
+  "tags": [
+    {
+      "name": "health",
+      "description": "Liveness and readiness probes for orchestration and monitoring. No authentication required."
+    },
+    {
+      "name": "auth",
+      "description": "Session lifecycle: examiner login, examinee entry/registration, logout, current-user profile, and CSRF token issuance."
+    },
+    {
+      "name": "examinee",
+      "description": "Examinee test-taking flow: resume the active session, fetch questions by position, save answers, submit for scoring, review results, and export personal data (GDPR). Requires an examinee session."
+    },
+    {
+      "name": "examiner-questions",
+      "description": "Question bank management: list, create, edit, and soft-delete multiple-choice questions. Requires an examiner session."
+    },
+    {
+      "name": "examiner-sessions",
+      "description": "Test session results: paginated listings, per-question detail, and CSV export. Requires an examiner session."
+    },
+    {
+      "name": "examiner-users",
+      "description": "User administration: create examiner accounts and request GDPR erasure of examinee data. Requires an admin examiner session."
+    },
+    {
+      "name": "examiner-settings",
+      "description": "Platform settings: data retention, retake policy, and question selection mode. Reads require an examiner session; updates require an admin examiner session."
+    }
+  ],
   "servers": [
     {
-      "url": "http://localhost:8000",
-      "description": "Local dev"
+      "url": "http://localhost:8000"
     }
   ]
 }

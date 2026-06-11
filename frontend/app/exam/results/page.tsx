@@ -27,9 +27,11 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { RouteGuard } from "@/components/route-guard";
 import { downloadBlob } from "@/lib/api/client";
 import { exportMyData, fetchReview } from "@/lib/api/examinee";
+import { formatErrorMessage } from "@/lib/errors/problem";
 import { useAuth } from "@/lib/auth";
 import { usePageTitle } from "@/lib/hooks/use-page-title";
 import { useStatusAnnouncer } from "@/components/status-announcer";
@@ -41,6 +43,8 @@ function ResultsContent() {
   const { announceAssertive } = useStatusAnnouncer();
   const [reviewItems, setReviewItems] = useState<ReviewItem[]>([]);
   const [loadingReview, setLoadingReview] = useState(false);
+  const [reviewError, setReviewError] = useState("");
+  const [exportError, setExportError] = useState("");
   const [expandedQuestions, setExpandedQuestions] = useState<Set<number>>(new Set());
 
   const computedFromReview =
@@ -58,9 +62,13 @@ function ResultsContent() {
   useEffect(() => {
     if (!sessionId) return;
     setLoadingReview(true);
+    setReviewError("");
     fetchReview(sessionId)
       .then((data) => setReviewItems(data.items))
-      .catch(() => setReviewItems([]))
+      .catch((err) => {
+        setReviewItems([]);
+        setReviewError(formatErrorMessage(err, "Failed to load the answer review."));
+      })
       .finally(() => setLoadingReview(false));
   }, [sessionId]);
 
@@ -102,8 +110,13 @@ function ResultsContent() {
   };
 
   const handleExportData = async () => {
-    const blob = await exportMyData();
-    downloadBlob(blob, "my-data-export.json");
+    setExportError("");
+    try {
+      const blob = await exportMyData();
+      downloadBlob(blob, "my-data-export.json");
+    } catch (err) {
+      setExportError(formatErrorMessage(err, "Failed to export your data."));
+    }
   };
 
   return (
@@ -215,6 +228,11 @@ function ResultsContent() {
                 <Download className="mr-2 h-4 w-4" />
                 Download My Data (GDPR)
               </Button>
+              {exportError && (
+                <Alert variant="destructive" className="mt-4">
+                  <AlertDescription>{exportError}</AlertDescription>
+                </Alert>
+              )}
             </div>
           </TabsContent>
 
@@ -229,6 +247,10 @@ function ResultsContent() {
               <CardContent>
                 {loadingReview ? (
                   <p className="text-muted-foreground">Loading review…</p>
+                ) : reviewError ? (
+                  <Alert variant="destructive">
+                    <AlertDescription>{reviewError}</AlertDescription>
+                  </Alert>
                 ) : (
                   <ScrollArea className="h-[600px] pr-4">
                     <div className="space-y-3">

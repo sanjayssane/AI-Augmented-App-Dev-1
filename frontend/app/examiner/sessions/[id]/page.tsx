@@ -22,6 +22,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { getSessionDetail } from "@/lib/api/examiner";
+import { ErrorPage } from "@/components/error-page";
+import { ApiError, formatErrorMessage } from "@/lib/errors/problem";
 import { usePageTitle } from "@/lib/hooks/use-page-title";
 import type { SessionDetailOut } from "@/lib/types";
 
@@ -31,15 +33,17 @@ export default function SessionDetailPage() {
   const [detail, setDetail] = useState<SessionDetailOut | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [errorStatus, setErrorStatus] = useState<number | null>(null);
 
   usePageTitle(detail ? `Session ${detail.prn ?? sessionId}` : "Session Detail");
 
   useEffect(() => {
     getSessionDetail(sessionId)
       .then(setDetail)
-      .catch((err) =>
-        setError(err instanceof Error ? err.message : "Failed to load session"),
-      )
+      .catch((err) => {
+        setError(formatErrorMessage(err, "Failed to load the session."));
+        setErrorStatus(err instanceof ApiError ? err.status : 500);
+      })
       .finally(() => setLoading(false));
   }, [sessionId]);
 
@@ -53,12 +57,10 @@ export default function SessionDetailPage() {
 
   if (error || !detail) {
     return (
-      <div className="mx-auto max-w-7xl px-4 py-12">
-        <p className="text-destructive">{error || "Session not found"}</p>
-        <Button variant="outline" className="mt-4" asChild>
-          <Link href="/examiner/dashboard">Back to dashboard</Link>
-        </Button>
-      </div>
+      <ErrorPage
+        statusCode={errorStatus ?? 404}
+        description={error || "The requested session does not exist."}
+      />
     );
   }
 

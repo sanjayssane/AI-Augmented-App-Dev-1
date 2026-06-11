@@ -39,6 +39,7 @@ export type ExamineeSessionResource = {
 export type CurrentUserData = {
   user_id: string;
   role: UserRole;
+  csrf_token: string;
   prn?: string | null;
   name?: string | null;
   username?: string | null;
